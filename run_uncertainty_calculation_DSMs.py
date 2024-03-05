@@ -2,14 +2,9 @@
 from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import numpy as np
 import os
+import argparse
 
-vert_diff_path_dsm="/Users/cassandrabrigham/Documents/POSTDOC/Data analysis/Error/Code testing/Data/1st return/DoDs/test_site_5_FL_1st_return_dod.tif"
-vert_diff_path_dtm="/Users/cassandrabrigham/Documents/POSTDOC/Data analysis/Error/Code testing/Data/Ground A/DoDs/test_site_5a_FL_ground_dod.tif"
-output_path = "vertical_differencing_dsm_modified.tif"
-unit = "m"
-dem_resolution = 1
-
-def uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, output_path, unit, dem_resolution):
+def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, output_path, unit, dem_resolution):
     #Load vertical differencing raster data from DTMs
     raster_data_handler_dtm=RasterDataHandler(vert_diff_path_dtm, unit, dem_resolution)
     raster_data_handler_dtm.load_raster()
@@ -123,4 +118,15 @@ def uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, output
         file.write(f"\t\t\tMaximum:{uncertainty.total_mean_uncertainty_max:.4f}"+unit+"\n")
 
 
-uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, output_path, unit, dem_resolution)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='A calculation of mean uncertainty for vertical differencing rasters derived from Digital Surface Models.')
+    parser.add_argument('vert_diff_path_dsm', type=str, help='DSM path')
+    parser.add_argument('vert_diff_path_dtm', type=str, help='DTM path')
+    parser.add_argument('output_path', type=str, help='Path to raster of vertical differencing results minus the vertical bias')
+    parser.add_argument('unit', type=str, help='Units of input rasters')
+    parser.add_argument('dem_resolution', type=float, help='Resolution of DSM rasters')
+    args = parser.parse_args()
+    
+    run_uncertainty_calculation_DSMs(args.vert_diff_path_dsm, args.vert_diff_path_dtm, args.output_path, args.unit, args.dem_resolution)
+
+
