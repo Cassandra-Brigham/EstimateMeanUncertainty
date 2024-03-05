@@ -33,7 +33,7 @@ class RasterDataHandler:
     sample_raster(samples_per_sq_km, max_samples)
         Samples the raster data based on a given density and maximum number of samples, returning the sample values and their coordinates.
     """
-    def __init__(self, raster_path):
+    def __init__(self, raster_path, unit, resolution):
         """
         Parameters:
         -----------
@@ -41,6 +41,8 @@ class RasterDataHandler:
             The file path to the raster data.
         """
         self.raster_path = raster_path
+        self.unit = unit
+        self.resolution = resolution
         self.rioxarray_obj = None
         self.data_array = None
 
@@ -132,23 +134,22 @@ class StatisticalAnalysis:
     bootstrap_uncertainty_subsample(data, n_bootstrap=1000, subsample_proportion=0.1):
         Estimates the uncertainty of the median value of the data using bootstrap resampling.
     """
+    def __init__(self, raster_data_handler):
+        """
+        Parameters:
+        -----------
+        raster_data_handler : RasterDataHandler
+        An instance of RasterDataHandler to manage raster data operations.
+        """
+        self.raster_data_handler = raster_data_handler
 
-    @staticmethod
-    def plot_data_stats(data):
+    
+    def plot_data_stats(self):
         """
         Plots a histogram of the provided data, filtering out extreme outliers, and overlays lines representing
         the mean, median, and mode. Also displays a box with additional statistical information.
-
-        Parameters:
-        -----------
-        data : numpy.ndarray
-            An array of numerical data points.
-
-        Returns:
-        --------
-        median : float
-            The median value of the provided data.
         """
+        data = self.raster_data_handler.data_array
         mean = np.mean(data)
         median = np.median(data)
         mode_val = stats.mode(data)[0]
@@ -181,7 +182,7 @@ class StatisticalAnalysis:
         plt.gca().text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
                        verticalalignment='top', bbox=props)
         
-        ax.set_xlabel('Value')
+        ax.set_xlabel(f'Vertical Difference ({self.raster_data_handler.unit})')
         ax.set_ylabel('Count')
         ax.set_title('Histogram with Statistics')
         ax.legend()
@@ -189,8 +190,8 @@ class StatisticalAnalysis:
 
         return fig
 
-    @staticmethod
-    def bootstrap_uncertainty_subsample(data, n_bootstrap=1000, subsample_proportion=0.1):
+    
+    def bootstrap_uncertainty_subsample(self, n_bootstrap=1000, subsample_proportion=0.1):
         """
         Estimates the uncertainty of the median value of the data using bootstrap resampling. This method randomly
         samples subsets of the data, calculates their medians, and then computes the standard deviation of these
@@ -198,8 +199,6 @@ class StatisticalAnalysis:
 
         Parameters:
         -----------
-        data : numpy.ndarray
-            An array of numerical data points.
         n_bootstrap : int, optional
             The number of bootstrap samples to generate (default is 1000).
         subsample_proportion : float, optional
@@ -210,10 +209,11 @@ class StatisticalAnalysis:
         uncertainty : float
             The standard deviation of the bootstrap medians, representing the uncertainty of the median value.
         """
-        subsample_size = int(subsample_proportion * len(data))
+        
+        subsample_size = int(subsample_proportion * len(self.raster_data_handler.data_array))
         bootstrap_medians = np.zeros(n_bootstrap)
         for i in range(n_bootstrap):
-            sample = np.random.choice(data, size=subsample_size, replace=True)
+            sample = np.random.choice(self.raster_data_handler.data_array, size=subsample_size, replace=True)
             bootstrap_medians[i] = np.median(sample)
         return np.std(bootstrap_medians)
 
@@ -517,16 +517,13 @@ class UncertaintyCalculation:
 
         self.mean_random_uncorrelated = rms / np.sqrt(len(data))
 
-    def calc_mean_random_correlated(self, dem_resolution=1):
+    def calc_mean_random_correlated(self):
         """
         Calculates the mean random uncertainties correlated with the spatial structure defined by
         the variogram's spherical models.
 
-        Parameters:
-        -----------
-        dem_resolution : float, optional
-            The resolution of the Digital Elevation Model (DEM) in the same units as the variogram's ranges (default is 1).
         """
+        dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
         self.mean_random_correlated_1 = (np.sqrt(2 * self.variogram_analysis.sills[0]) / np.sqrt(len(data))) * np.sqrt((np.pi * np.square(self.variogram_analysis.ranges[0])) / (5 * np.square(dem_resolution)))
@@ -534,12 +531,12 @@ class UncertaintyCalculation:
         self.mean_random_correlated_3 = (np.sqrt(2 * self.variogram_analysis.sills[2]) / np.sqrt(len(data))) * np.sqrt((np.pi * np.square(self.variogram_analysis.ranges[2])) / (5 * np.square(dem_resolution)))
         self.area=dem_resolution*len(data)
 
-    def calc_mean_random_correlated_min(self, dem_resolution=1):
+    def calc_mean_random_correlated_min(self):
         """
         Calculates the minimum mean random uncertainties correlated with the spatial structure defined by
         the variogram's spherical models, as defined by the optimal range and sill values minus 1 std error.
         """
-        
+        dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
         if self.variogram_analysis.sills_min[0]>0:
@@ -556,12 +553,12 @@ class UncertaintyCalculation:
         else:
             self.mean_random_correlated_3_min = 0
 
-    def calc_mean_random_correlated_max(self, dem_resolution=1):
+    def calc_mean_random_correlated_max(self):
         """
         Calculates the maximum mean random uncertainties correlated with the spatial structure defined by
         the variogram's spherical models, as defined by the optimal range and sill values plus 1 std error.
         """
-        
+        dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
         self.mean_random_correlated_1_max = (np.sqrt(2 * self.variogram_analysis.sills_max[0]) / np.sqrt(len(data))) * np.sqrt((np.pi * np.square(self.variogram_analysis.ranges_max[0])) / (5 * np.square(dem_resolution)))
