@@ -1,0 +1,15 @@
+name: uncertainty_calculation
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9.18
+  - numpy
+  - math
+  - rioxarray
+  - rasterio
+  - matplotlib
+  - scipy
+  - geopandas
+  - pip
+  
