@@ -119,7 +119,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='A calculation of mean uncertainty for vertical differencing rasters derived from Digital Surface Models.')
+    parser = argparse.ArgumentParser(description='A calculation to estimate total mean uncertainty and its constituent components for vertical differencing rasters derived from Digital Surface Models.')
     parser.add_argument('vert_diff_path_dsm', type=str, help='DSM path')
     parser.add_argument('vert_diff_path_dtm', type=str, help='DTM path')
     parser.add_argument('output_path', type=str, help='Path to raster of vertical differencing results minus the vertical bias')
