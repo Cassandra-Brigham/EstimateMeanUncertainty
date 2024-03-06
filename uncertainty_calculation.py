@@ -336,14 +336,12 @@ class VariogramAnalysis:
         Fits three spherical models without a nugget effect to the mean variogram data.
         This method sets the fitted model parameters, RMSE, ranges, and sills attributes.
         """
-        #condition = self.err_variogram <= np.max(self.mean_variogram)/2
-        #condition = self.lags #<= np.percentile(self.lags,95)
-        filtered_lags = self.lags#np.concatenate([np.array([0]),self.lags[condition]],axis=0)
-        filtered_mean_variogram = self.mean_variogram#np.concatenate([np.array([0]),self.mean_variogram[condition]],axis=0)
+        lags = self.lags
+        mean_variogram = self.mean_variogram
 
         # Define bounds
         lower_bounds = [0, 0, 0, 0, 0, 0]
-        upper_bounds = [np.max(filtered_mean_variogram), np.max(filtered_lags), np.max(filtered_mean_variogram), np.max(filtered_lags), np.max(filtered_mean_variogram), np.max(filtered_lags)]
+        upper_bounds = [np.max(mean_variogram), np.max(lags), np.max(mean_variogram), np.max(lags), np.max(mean_variogram), np.max(lags)]
         bounds = (lower_bounds, upper_bounds)
 
         #Initial guess
@@ -364,7 +362,7 @@ class VariogramAnalysis:
             initial_guess = [C1, a1, C2, a2, C3, a3]
             return initial_guess
             
-        intial_guess = initial_guess_func(filtered_mean_variogram,filtered_lags)
+        intial_guess = initial_guess_func(mean_variogram,lags)
         self.initial_guess = intial_guess
 
         # Define spherical model with no nugget
@@ -383,14 +381,14 @@ class VariogramAnalysis:
         sigma_filtered[sigma_filtered < np.min(sigma_non_zero)] = np.min(sigma_non_zero)
 
         # Perform the curve fitting with bounds
-        popt, pcov = curve_fit(spherical_model_no_nugget, filtered_lags, filtered_mean_variogram, sigma=sigma_filtered,p0=self.initial_guess, bounds=bounds, maxfev=10000)
+        popt, pcov = curve_fit(spherical_model_no_nugget, lags, mean_variogram, sigma=sigma_filtered,p0=self.initial_guess, bounds=bounds, maxfev=10000)
 
         # Calculate the standard deviations (errors) of the optimized parameters
         self.err_param = np.sqrt(np.diag(pcov))
 
         # Calculate RMSE using only the filtered data
         self.fitted_variogram = spherical_model_no_nugget(self.lags, *popt)  
-        self.rmse_filtered = np.sqrt(np.mean((filtered_mean_variogram - spherical_model_no_nugget(filtered_lags, *popt))**2))
+        self.rmse_filtered = np.sqrt(np.mean((mean_variogram - spherical_model_no_nugget(lags, *popt))**2))
         self.rmse = np.sqrt(np.mean((self.mean_variogram - self.fitted_variogram)**2))
         self.ranges = [popt[i] for i in range(1, len(popt), 2)]
         self.err_ranges = [self.err_param[i] for i in range(1, len(self.err_param), 2)]
