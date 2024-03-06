@@ -1,0 +1,14 @@
+"vertical_differencing_DTMs.tif"
+"vertical_differencing_DTMs_modified.tif"
+"m" 
+1.0
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,6 @@
+"vertical_differencing_dsm.tif"
+"vertical_differencing_dtm.tif"
+"vertical_differencing_dsm_modified.tif"
+"m"
+1.0
+
