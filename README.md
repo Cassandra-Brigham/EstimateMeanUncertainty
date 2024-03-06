@@ -1,6 +1,6 @@
 # EstimateMeanUncertainty
 
-##Pseudo-code guide for uncertainty calculation
+## Pseudo-code guide for uncertainty calculation
 
 
 
@@ -16,11 +16,11 @@ If the user is creating a vertical differencing raster from DTMs, use the script
 
 
 
-###Case 1: Vertical differencing raster from DTMs (ground points only)
+### Case 1: Vertical differencing raster from DTMs (ground points only)
 
 
 
-####Step 1.
+#### Step 1.
 
 The required Python libraries are listed in the environment.yml file. 
 
@@ -52,7 +52,7 @@ To change that, modify their paths in the script here:
 
  
 
-####Step 2. 
+#### Step 2. 
 
 For case 1, use the script “run_uncertainty_calculation_DTMs.py.” Its inputs are: 1) the path to the vertical differencing raster (“vertical_differencing_dtm.tif”) generated during the OT Vertical Differencing algorithm; 2) the path to an output raster that will be generated when the script is run (“vertical_differencing_dtm_modified.tif”); 3) the unit of the raster (“m”); 4) the resolution of the vertical differencing raster (1.0).
 
@@ -96,7 +96,7 @@ Make sure that “uncertainty_calculation.py” is in the same directory as “r
 
 
 
-####Step 3.
+#### Step 3.
 
 There are three output figures (“modified_diff_raster.png,” “vert_diff_ground_stats.png,” “variogram_with_fit.png”) and one text file (“output_variables.txt”). The text file contains the uncertainty values, as well as some other important contextual information. Below is an example of the outputs:
 
@@ -121,11 +121,11 @@ There are three output figures (“modified_diff_raster.png,” “vert_diff_gro
 
 
 
-###Case 2: Vertical differencing raster from DSMs
+### Case 2: Vertical differencing raster from DSMs
 
 
 
-####Step 0.
+#### Step 0.
 
 This is the case that the user does not select “Ground only” while setting up their differencing job in OT. By default, DSMs of the reference and compare point cloud datasets will be made and used to generate a vertical differencing raster (“vertical_differencing_dsm.tif”) during the OT Vertical Differencing algorithm. 
 
@@ -133,7 +133,7 @@ In parallel to those DSMs, make DTMs (using only ground points) of the reference
 
 
 
-####Step 1.
+#### Step 1.
 
 The required Python libraries are listed in the environment.yml file. 
 
@@ -165,7 +165,7 @@ To change that, modify their paths in the script here:
 
 
 
-####Step 2. 
+#### Step 2. 
 
 For case 2, use the script “run_uncertainty_calculation_DSMs.py.” Its inputs are: 1) the path to the DSM-derived vertical differencing raster(“vertical_differencing_dsm.tif”); 2) the path to the DTM-derived vertical differencing raster (“vertical_differencing_dtm.tif”); 3) the path to an output raster that will be generated when the script is run (“vertical_differencing_dsm_modified.tif”); 4) the unit of the raster (“m”); 5) the resolution of the vertical differencing raster (1.0).
 
@@ -199,7 +199,7 @@ Again, make sure that “uncertainty_calculation.py” is in the same directory 
 
 
 
-####Step 3.
+#### Step 3.
 
 There are four output figures (“modified_diff_raster.png,” “vert_diff_1st_returns_stats.png,” “vert_diff_ground_stats.png,” “variogram_with_fit.png”) and one text file (“output_variables.txt”). The text file contains the uncertainty values, as well as some other important contextual information. Below is the same example location, but outputs from the DSM differencing results:
 
@@ -235,6 +235,6 @@ There are four output figures (“modified_diff_raster.png,” “vert_diff_1st_
 
 
 
-###Notes
+### Notes
 
 Eventually, the units and the resolution should update dynamically based on the dataset metadata and the DEM resolution selected by the user.
