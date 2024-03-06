@@ -375,9 +375,15 @@ class VariogramAnalysis:
                 model[mask] += C * (3*h[mask]/(2*a) - (h[mask]**3)/(2*a**3))
                 model[~mask] += C
             return model
+        
+        sigma_filtered = self.err_variogram
+        sigma_non_zero = sigma_filtered[sigma_filtered > 0]
+        sigma_non_zero = sigma_non_zero[sigma_non_zero != np.nan]
+
+        sigma_filtered[sigma_filtered < np.min(sigma_non_zero)] = np.min(sigma_non_zero)
 
         # Perform the curve fitting with bounds
-        popt, pcov = curve_fit(spherical_model_no_nugget, filtered_lags, filtered_mean_variogram, sigma=self.err_variogram,p0=self.initial_guess, bounds=bounds, maxfev=10000)
+        popt, pcov = curve_fit(spherical_model_no_nugget, filtered_lags, filtered_mean_variogram, sigma=sigma_filtered,p0=self.initial_guess, bounds=bounds, maxfev=10000)
 
         # Calculate the standard deviations (errors) of the optimized parameters
         self.err_param = np.sqrt(np.diag(pcov))
