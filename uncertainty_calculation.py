@@ -336,8 +336,12 @@ class VariogramAnalysis:
         Fits three spherical models without a nugget effect to the mean variogram data.
         This method sets the fitted model parameters, RMSE, ranges, and sills attributes.
         """
-        lags = self.lags
-        mean_variogram = self.mean_variogram
+        
+        condition1 = self.err_variogram < np.max(self.mean_variogram)/2 
+        condition2 = self.lags <= np.percentile(self.lags,95)
+        condition=condition1 & condition2
+        lags = self.lags[condition]
+        mean_variogram = self.mean_variogram[condition]
 
         # Define bounds
         lower_bounds = [0, 0, 0, 0, 0, 0]
@@ -374,14 +378,14 @@ class VariogramAnalysis:
                 model[~mask] += C
             return model
         
-        sigma_filtered = self.err_variogram
+        sigma_filtered = self.err_variogram[condition]
         sigma_non_zero = sigma_filtered[sigma_filtered > 0]
         sigma_non_zero = sigma_non_zero[sigma_non_zero != np.nan]
 
         sigma_filtered[sigma_filtered < np.min(sigma_non_zero)] = np.min(sigma_non_zero)
 
         # Perform the curve fitting with bounds
-        popt, pcov = curve_fit(spherical_model_no_nugget, lags, mean_variogram, sigma=sigma_filtered,p0=self.initial_guess, bounds=bounds, maxfev=10000)
+        popt, pcov = curve_fit(spherical_model_no_nugget, lags, mean_variogram, sigma=sigma_filtered,absolute_sigma=False, p0=self.initial_guess, bounds=bounds, maxfev=10000)
 
         # Calculate the standard deviations (errors) of the optimized parameters
         self.err_param = np.sqrt(np.diag(pcov))
@@ -425,12 +429,12 @@ class VariogramAnalysis:
         for i, (range, error) in enumerate(zip(self.ranges, self.err_ranges)):
             color = colors[i]
             # Bold line at range value
-            ax[1].axvline(x=range, color=color, lw=2)
+            ax[1].axvline(x=range, color=color,linestyle='--', lw=1, label=f'Range {i+1}')
             # Lighter lines at +/- 1 std error
-            ax[1].axvline(x=range - error, color=color, linestyle='--', lw=1)
-            ax[1].axvline(x=range + error, color=color, linestyle='--', lw=1)
+            #ax[1].axvline(x=range - error, color=color, linestyle='--', lw=1)
+            #ax[1].axvline(x=range + error, color=color, linestyle='--', lw=1)
             # Translucent area (using fill_betweenx to fill vertically)
-            ax[1].fill_betweenx([0, self.sills[0]], range - error, range + error, color=color, alpha=0.2)
+            #ax[1].fill_betweenx([0, self.sills[i]], range - error, range + error, color=color, alpha=0.2)
        
         ax[1].set_xlabel('Lag Distance'), ax[1].set_ylabel('Semivariance')
         ax[1].legend()
