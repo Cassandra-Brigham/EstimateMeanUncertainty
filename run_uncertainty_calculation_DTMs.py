@@ -49,6 +49,10 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
     uncertainty.calc_total_mean_uncertainty_min()
     uncertainty.calc_total_mean_uncertainty_max()
 
+    #Create output folder
+    if not os.path.exists("outputs/"):
+        os.makedirs("outputs/")
+
     #Plot and save modified raster
     fig1=raster2_data_handler.plot_raster()
     fig1.savefig("outputs/modified_diff_raster.png", dpi=300)
