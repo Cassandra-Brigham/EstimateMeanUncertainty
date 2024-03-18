@@ -186,7 +186,7 @@ class StatisticalAnalysis:
         ax.set_ylabel('Count')
         ax.set_title('Histogram with Statistics')
         ax.legend()
-        plt.tight_layout(), plt.show()
+        plt.tight_layout()#, plt.show()
 
         return fig
 
@@ -441,7 +441,7 @@ class VariogramAnalysis:
         ax[1].set_title(f'RMSE: {self.rmse:.4f}')
         
         plt.setp(ax[0].get_xticklabels(), visible=False)
-        plt.tight_layout(), plt.show()
+        plt.tight_layout()#, plt.show()
 
         return fig
 
