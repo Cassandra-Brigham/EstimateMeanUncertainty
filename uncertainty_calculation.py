@@ -145,14 +145,11 @@ class StatisticalAnalysis:
 
     
     def plot_data_stats(self):
-        """
-        Plots a histogram of the provided data, filtering out extreme outliers, and overlays lines representing
-        the mean, median, and mode. Also displays a box with additional statistical information.
-        """
         data = self.raster_data_handler.data_array
         mean = np.mean(data)
         median = np.median(data)
-        mode_val = stats.mode(data)[0]
+        mode_result = stats.mode(data, nan_policy='omit')  # This returns a ModeResult object.
+        mode_val = mode_result.mode  # This might be an array or a single value.
         q1 = np.percentile(data, 25)
         q3 = np.percentile(data, 75)
         p1 = np.percentile(data, 1)
@@ -161,32 +158,40 @@ class StatisticalAnalysis:
         maximum = np.max(data)
         
         filtered_data = data[(data >= p1) & (data <= p99)]
+        
+        # Ensure mode_val is iterable. If it's a single value, make it a list.
+        if not isinstance(mode_val, np.ndarray):
+            mode_val = [mode_val]  # Make it a list so it's iterable.
 
         fig, ax = plt.subplots()
         
         ax.hist(filtered_data, bins=60, density=False, alpha=0.6, color='g')
-        ax.axvline(mean, color='r', linestyle='dashed', linewidth=0.75, label='Mean')
-        ax.axvline(median, color='b', linestyle='dashed', linewidth=0.75, label='Median')
-        ax.axvline(mode_val, color='purple', linestyle='dashed', linewidth=0.75, label='Mode')
+        ax.axvline(mean, color='r', linestyle='dashed', linewidth=1, label='Mean')
+        ax.axvline(median, color='b', linestyle='dashed', linewidth=1, label='Median')
+        for m in mode_val:  # Plot each mode
+            ax.axvline(m, color='purple', linestyle='dashed', linewidth=1, label='Mode' if m == mode_val[0] else "_nolegend_")
+        
+        # Preparing the mode string for multi-modal data
+        mode_str = ", ".join([f'{m:.4f}' for m in mode_val])
         
         textstr = '\n'.join((
             f'Mean: {mean:.4f}',
             f'Median: {median:.4f}',
-            f'Mode: {mode_val:.4f}',
+            f'Mode(s): {mode_str}',
             f'Minimum: {minimum:.4f}',
             f'Maximum: {maximum:.4f}',
             f'1st Quartile: {q1:.4f}',
             f'3rd Quartile: {q3:.4f}'))
         
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.4)
-        plt.gca().text(0.05, 0.95, textstr, transform=plt.gca().transAxes, fontsize=10,
-                       verticalalignment='top', bbox=props)
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', bbox=props)
         
         ax.set_xlabel(f'Vertical Difference ({self.raster_data_handler.unit})')
         ax.set_ylabel('Count')
         ax.set_title('Histogram with Statistics')
         ax.legend()
-        plt.tight_layout()#, plt.show()
+        plt.tight_layout()
 
         return fig
 
