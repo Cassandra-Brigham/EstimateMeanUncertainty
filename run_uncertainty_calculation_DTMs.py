@@ -55,18 +55,18 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
 
     #Plot and save modified raster
     fig1=raster2_data_handler.plot_raster()
-    fig1.savefig("outputs/modified_diff_raster.png", dpi=300)
+    fig1.savefig("outputs/modified_diff_raster_ground.png", dpi=300)
 
     # Plot and save stats
     fig2=stats_dtm.plot_data_stats()
-    fig2.savefig("outputs/vert_diff_ground_stats.png", dpi=300)
+    fig2.savefig("outputs/vert_diff_ground_stats_ground.png", dpi=300)
 
     # Plot and save variogram
     fig3=V.plot_3_spherical_models_no_nugget()
-    fig3.savefig("outputs/variogram_with_fit.png", dpi=300)
+    fig3.savefig("outputs/variogram_with_fit_ground.png", dpi=300)
 
     # Write output variables to text file
-    file_path = "outputs/output_variables.txt"
+    file_path = "outputs/output_variables_ground.txt"
     with open(file_path, 'w') as file:
         file.write("Output variables\n")
         file.write("\tArea\n")
