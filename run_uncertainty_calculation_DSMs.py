@@ -78,7 +78,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
     
     # Write output variables to text file
-    file_path = "outputs/output_variables.txt"
+    file_path = "outputs/output_variables_1st_return.txt"
     with open(file_path, 'w') as file:
         file.write("Output variables\n")
         file.write("\tArea\n")
