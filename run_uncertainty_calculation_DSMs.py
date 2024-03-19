@@ -61,20 +61,20 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
     #Plot and save modified raster
     fig1=raster2_data_handler.plot_raster()
-    fig1.savefig("outputs/modified_diff_raster.png", dpi=300)
+    fig1.savefig("outputs/modified_diff_raster_1st_return.png", dpi=300)
 
     # Plot and save stats (ground)
     fig2=stats_dtm.plot_data_stats()
-    fig2.savefig("outputs/vert_diff_ground_stats.png", dpi=300)
+    fig2.savefig("outputs/vert_diff_ground_stats_1st_return.png", dpi=300)
 
     # Plot and save stats (1st return)
     stats_dsm = StatisticalAnalysis(raster_data_handler_dsm)
     fig3=stats_dsm.plot_data_stats()
-    fig3.savefig("outputs/vert_diff_1st_returns_stats.png", dpi=300)
+    fig3.savefig("outputs/vert_diff_1st_returns_stats_1st_return.png", dpi=300)
 
     # Plot and save variogram
     fig4=V.plot_3_spherical_models_no_nugget()
-    fig4.savefig("outputs/variogram_with_fit.png", dpi=300)
+    fig4.savefig("outputs/variogram_with_fit_1st_return.png", dpi=300)
 
     
     # Write output variables to text file
