@@ -85,7 +85,12 @@ class RasterDataHandler:
     
     def plot_raster(self):
         fig,ax=plt.subplots()
-        self.rioxarray_obj.plot(cmap="RdBu", robust=True, ax=ax)
+        self.rioxarray_obj.plot(cmap="bwr_r", vmin=np.percentile(2,self.data_array),vmax=np.percentile(98,self.data_array), ax=ax)
+        ax.set_title("Vertical differencing results corrected for vertical bias (m)")
+        ax.set_xlabel('Easting (m)')
+        ax.set_ylabel('Northing (m)')
+        ax.ticklabel_format(style="plain")
+        ax.set_aspect('equal')
         return fig
 
     def sample_raster(self, samples_per_sq_km, max_samples):
@@ -172,16 +177,16 @@ class StatisticalAnalysis:
             ax.axvline(m, color='purple', linestyle='dashed', linewidth=1, label='Mode' if m == mode_val[0] else "_nolegend_")
         
         # Preparing the mode string for multi-modal data
-        mode_str = ", ".join([f'{m:.4f}' for m in mode_val])
+        mode_str = ", ".join([f'{m:.3f}' for m in mode_val])
         
         textstr = '\n'.join((
-            f'Mean: {mean:.4f}',
-            f'Median: {median:.4f}',
+            f'Mean: {mean:.3f}',
+            f'Median: {median:.3f}',
             f'Mode(s): {mode_str}',
-            f'Minimum: {minimum:.4f}',
-            f'Maximum: {maximum:.4f}',
-            f'1st Quartile: {q1:.4f}',
-            f'3rd Quartile: {q3:.4f}'))
+            f'Minimum: {minimum:.3f}',
+            f'Maximum: {maximum:.3f}',
+            f'1st Quartile: {q1:.3f}',
+            f'3rd Quartile: {q3:.3f}'))
         
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
@@ -189,7 +194,7 @@ class StatisticalAnalysis:
         
         ax.set_xlabel(f'Vertical Difference ({self.raster_data_handler.unit})')
         ax.set_ylabel('Count')
-        ax.set_title('Histogram with Statistics')
+        ax.set_title('Histogram of differencing results with exploratory statistics')
         ax.legend()
         plt.tight_layout()
 
