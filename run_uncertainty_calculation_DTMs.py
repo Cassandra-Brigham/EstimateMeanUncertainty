@@ -2,6 +2,8 @@ from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, Var
 import numpy as np
 import os
 import argparse
+#from decimal import Decimal, getcontext
+
 
 def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem_resolution):
     #Load raster data
@@ -66,44 +68,45 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
     fig3.savefig("outputs/variogram_with_fit_ground.png", dpi=300)
 
     # Write output variables to text file
-    file_path = "outputs/output_variables_ground.txt"
+    file_path = "outputs/uncertainty_estimation_output_ground.txt"
     with open(file_path, 'w') as file:
         file.write("Output variables\n")
         file.write("\tArea\n")
         file.write(f"\t\t{len(vert_diff_array_dtm)}"+unit+"^2\n")
         file.write("\tError\n")
-        file.write(f"\t\tVertical bias:{vertical_bias:.4f}"+unit+"\n")
-        file.write(f"\t\tUncertainty in the vertical bias:{median_uncertainty:.4f}"+unit+"\n")
+        file.write(f"\t\tVertical bias:{vertical_bias:.3f}"+unit+"\n")
+        file.write(f"\t\tUncertainty in the vertical bias:{median_uncertainty:.3f}"+unit+"\n")
         file.write("\tSpherical models\n")
         file.write("\t\tSpherical model 1\n")
-        file.write(f"\t\t\tRange 1: {V.ranges[0]:.4f}"+unit+"\n")
-        file.write(f"\t\t\tSill 1: {V.sills[0]:.4f}\n")
+        file.write(f"\t\t\tRange 1: {V.ranges[0]:.3f}"+unit+"\n")
+        file.write(f"\t\t\tSill 1: {V.sills[0]:.3f}\n")
         file.write("\t\tSpherical model 2\n")
-        file.write(f"\t\t\tRange 2: {V.ranges[1]:.4f}"+unit+"\n")
-        file.write(f"\t\t\tSill 2: {V.sills[1]:.4f}\n")
+        file.write(f"\t\t\tRange 2: {V.ranges[1]:.3f}"+unit+"\n")
+        file.write(f"\t\t\tSill 2: {V.sills[1]:.3f}\n")
         file.write("\t\tSpherical model 3\n")
-        file.write(f"\t\t\tRange 3: {V.ranges[2]:.4f}"+unit+"\n")
-        file.write(f"\t\t\tSill 3: {V.sills[2]:.4f}\n")
+        file.write(f"\t\t\tRange 3: {V.ranges[2]:.3f}"+unit+"\n")
+        file.write(f"\t\t\tSill 3: {V.sills[2]:.3f}\n")
         file.write("\tMean Uncertainty\n")
         file.write("\t\tMean, random, uncorrelated uncertainty\n")
-        file.write(f"\t\t\t{uncertainty.mean_random_uncorrelated:.4f}"+unit+"\n")
+        file.write(f"\t\t\t{uncertainty.mean_random_uncorrelated:.3f}"+unit+"\n")
         file.write("\t\tMean, random, correlated uncertainty\n")
         file.write(f"\t\t\tFrom model 1:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_1:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_1_min:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_1_max:.4f}"+unit+"\n")
+        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_1:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_1_min:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_1_max:.3f}"+unit+"\n")
         file.write(f"\t\t\tFrom model 2:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_2:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_2_min:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_2_max:.4f}"+unit+"\n")
+        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_2:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_2_min:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_2_max:.3f}"+unit+"\n")
         file.write(f"\t\t\tFrom model 3:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_3:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_3_min:.4f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_3_max:.4f}"+unit+"\n")
+        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_3:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_3_min:.3f}"+unit+"\n")
+        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_3_max:.3f}"+unit+"\n")
         file.write("\t\tTotal mean uncertainty\n")
-        file.write(f"\t\t\tOptimal:{uncertainty.total_mean_uncertainty:.4f}"+unit+"\n")
-        file.write(f"\t\t\tMinimum:{uncertainty.total_mean_uncertainty_min:.4f}"+unit+"\n")
-        file.write(f"\t\t\tMaximum:{uncertainty.total_mean_uncertainty_max:.4f}"+unit+"\n")
+        file.write(f"\t\t\tOptimal:{uncertainty.total_mean_uncertainty:.3f}"+unit+"\n")
+        file.write(f"\t\t\tMinimum:{uncertainty.total_mean_uncertainty_min:.3f}"+unit+"\n")
+        file.write(f"\t\t\tMaximum:{uncertainty.total_mean_uncertainty_max:.3f}"+unit+"\n")
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A calculation to estimate total mean uncertainty and its constituent components for vertical differencing rasters derived from Digital Terrain Models.')
