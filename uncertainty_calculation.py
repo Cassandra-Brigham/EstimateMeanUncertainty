@@ -81,11 +81,13 @@ class RasterDataHandler:
 
             with rasterio.open(output_raster_path, 'w', **out_meta) as dst:
                 dst.write(data)
+    
+    
                 
     
     def plot_raster(self):
-        fig,ax=plt.subplots()
-        self.rioxarray_obj.plot(cmap="bwr_r", vmin=np.percentile(2,self.data_array),vmax=np.percentile(98,self.data_array), ax=ax)
+        fig,ax=plt.subplots(figsize=(10, 6))
+        self.rioxarray_obj.plot(cmap="bwr_r", vmin=np.percentile(self.data_array,2),vmax=np.percentile(self.data_array, 98), ax=ax)
         ax.set_title("Vertical differencing results corrected for vertical bias (m)")
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
