@@ -1,15 +1,17 @@
 
 import numpy as np
-import rioxarray as rio
-import rasterio
+import pandas as pd
+import math
+import random
 import matplotlib.pyplot as plt
 from scipy import stats
+from scipy.stats import norm
 from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
 import rasterio
-import geopandas as gpd
-import math
-import pandas as pd
-from numba import njit, prange
+from rasterio import plot as rio_plot
+import rioxarray as rio
+from numba import njit, jit, prange
 
 def dropna(array):
     """
