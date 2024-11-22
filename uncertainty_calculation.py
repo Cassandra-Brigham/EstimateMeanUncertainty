@@ -255,8 +255,11 @@ class StatisticalAnalysis:
         self.raster_data_handler = raster_data_handler
 
     
-    def plot_data_stats(self):
-        data = self.raster_data_handler.data_array
+    def plot_data_stats(self, normal_transform = True, filtered = True):
+        if normal_transform:
+            data = self.raster_data_handler.normal_transform_data_array
+        else:
+            data = self.raster_data_handler.data_array
         mean = np.mean(data)
         median = np.median(data)
         mode_result = stats.mode(data, nan_policy='omit')  # This returns a ModeResult object.
@@ -268,7 +271,11 @@ class StatisticalAnalysis:
         minimum = np.min(data)
         maximum = np.max(data)
         
-        filtered_data = data[(data >= p1) & (data <= p99)]
+        if filtered:
+            # Filter the data to exclude outliers for better visualization
+            data = data[(data >= p1) & (data <= p99)]
+        else:
+            data = data
         
         # Ensure mode_val is iterable. If it's a single value, make it a list.
         if not isinstance(mode_val, np.ndarray):
@@ -276,7 +283,8 @@ class StatisticalAnalysis:
 
         fig, ax = plt.subplots()
         
-        ax.hist(filtered_data, bins=60, density=False, alpha=0.6, color='g')
+        # Plot the histogram of the data
+        ax.hist(data, bins=60, density=False, alpha=0.6, color='g')
         ax.axvline(mean, color='r', linestyle='dashed', linewidth=1, label='Mean')
         ax.axvline(median, color='b', linestyle='dashed', linewidth=1, label='Median')
         for m in mode_val:  # Plot each mode
