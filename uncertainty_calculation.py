@@ -64,8 +64,14 @@ class RasterDataHandler:
         self.resolution = resolution
         self.rioxarray_obj = None
         self.data_array = None
+        self.transformed_values = None
+        self.sorted_data = None
+        self.normal_scores = None
         self.samples = None
         self.coords = None
+        self.normal_transform_raster_path = None
+        self.normal_transform_rioxarray_obj = None
+        self.normal_transform_data_array = None
 
     def load_raster(self, masked=True):
         """
@@ -102,24 +108,93 @@ class RasterDataHandler:
 
             with rasterio.open(output_raster_path, 'w', **out_meta) as dst:
                 dst.write(data)
-                
-    def plot_raster(self):
+    
+    @staticmethod
+    def normal_score_transform(data):
+        """
+        Transform the data to normal scores using rank-based empirical CDF.
+        """
+        sorted_data = np.sort(data)
+        ranks = np.argsort(data)
+        n = len(sorted_data)
+        normal_scores = norm.ppf((np.arange(1, n + 1) - 0.5) / n)
+        normal_score_data = np.zeros_like(data)
+        normal_score_data[ranks] = normal_scores
+        return normal_score_data, sorted_data, normal_scores
+    
+    def map_transformed_values_to_raster(self,output_raster_normal_transform):
+        """
+        Maps the transformed values back to a rioxarray DataArray of the original size and resolution.
+        
+        Returns:
+        --------
+        rioxarray_obj : xarray.DataArray
+            The rioxarray object with the transformed values mapped to the original raster's size and resolution.
+        """
+        with rasterio.open(self.raster_path) as src:
+            data = src.read(1)  # Read the first band
+            nodata = src.nodata
+            mask = data != nodata if nodata is not None else np.ones(data.shape, dtype=bool)
+            
+            # Ensure that the number of transformed values matches the number of True values in the mask
+            num_valid_values = np.count_nonzero(mask)
+            if len(self.transformed_values) != num_valid_values:
+                raise ValueError(f"Mismatch in the number of valid pixels: mask has {num_valid_values} valid values, but transformed data has {len(self.transformed_values)} values.")
+            
+            # Create an output array filled with nodata values
+            output_data = np.full(data.shape, nodata, dtype='float32')
+            
+            # Place the transformed values into the output array where the mask is True
+            output_data[mask] = self.transformed_values
+            
+            # Copy the metadata of the original raster
+            out_meta = src.meta.copy()
+            out_meta.update({'dtype': 'float32', 'nodata': nodata})
+            
+            # Save the new raster
+            with rasterio.open(output_raster_normal_transform, 'w', **out_meta) as dst: 
+                dst.write(output_data, 1)
+    
+    def transform_data(self, output_normal_transform_raster_path):
+        """
+
+        Transforms the data using the normal score transform.
+
+        """   
+        self.transformed_values, self.sorted_data, self.normal_scores = self.normal_score_transform(self.rioxarray_obj.data.flatten())
+        self.normal_transform_raster_path = output_normal_transform_raster_path
+        self.map_transformed_values_to_raster(self.normal_transform_raster_path)
+        self.normal_transform_rioxarray_obj = rio.open_rasterio(self.normal_transform_raster_path, masked=True)
+        self.normal_transform_data_array = self.normal_transform_rioxarray_obj.data[~np.isnan(self.normal_transform_rioxarray_obj.data)].flatten()
+        
+    def plot_raster(self, plot_title, normal_transform=True):
+        if normal_transform:
+            rio_data = self.normal_transform_rioxarray_obj
+            title = plot_title+" - Normal Score Transformed"
+        else:
+            rio_data = self.rioxarray_obj
+            title = plot_title
+            
         fig,ax=plt.subplots(figsize=(10, 6))
-        self.rioxarray_obj.plot(cmap="bwr_r", vmin=np.percentile(self.data_array,2),vmax=np.percentile(self.data_array, 98), ax=ax)
-        ax.set_title("Vertical differencing results corrected for vertical bias (m)")
+        rio_data.plot(cmap="bwr_r", ax=ax, robust = True)
+        ax.set_title(title)
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
         ax.ticklabel_format(style="plain")
         ax.set_aspect('equal')
         return fig
 
-    def sample_raster(self, area_side, samples_per_area, max_samples):
+    def sample_raster(self, area_side, samples_per_area, max_samples, normal_transform=True):
         """
         Samples the raster data based on a given density (samples per square kilometer) 
         and a maximum number of samples to limit analysis time.
         Returns the sampled values and their corresponding coordinates.
         """
-        with rasterio.open(self.raster_path) as src:
+        if normal_transform:
+            raster_path = self.normal_transform_raster_path
+        else:
+            raster_path = self.raster_path
+        with rasterio.open(raster_path) as src:
             data = src.read(1)
             nodata = src.nodata
             
@@ -158,8 +233,6 @@ class RasterDataHandler:
             # Store samples and coordinates
             self.samples = filtered_samples
             self.coords = filtered_coords
-    
-    
 
 class StatisticalAnalysis:
     """
