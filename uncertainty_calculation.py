@@ -411,11 +411,105 @@ class VariogramAnalysis:
         self.best_params = None
         self.best_model_config = None
         self.best_nugget = None
+        self.normal_scores = None
+        self.declustering_weights = None
+        self.untransformed_sills = None
+        self.untransformed_err_sills = None
+        self.back_transformed_variogram = None
 
 
-    def numba_variogram(self, area_side, samples_per_area, max_samples, bin_width,max_lag_multiplier):
+    def cell_declustering_weights(self, cell_size, n_offsets):
+        """
+        Calculate declustering weights using cell declustering.
         
-        self.raster_data_handler.sample_raster(area_side, samples_per_area, max_samples)
+        Parameters:
+        - coordinates: (n, 2) array of x, y coordinates.
+        - cell_size: Size of each cell for declustering.
+        - n_offsets: Number of random origins to average weights.
+        
+        Returns:
+        - weights: Declustering weights for each data point.
+        """
+        coordinates = self.raster_data_handler.coords
+        n_points = coordinates.shape[0]
+        weights = np.zeros(n_points)
+        
+        # Iterate over a number of random grid origins to stabilize the weights
+        for _ in range(n_offsets):
+            # Randomly choose grid origin offsets
+            x_offset = np.random.uniform(0, cell_size)
+            y_offset = np.random.uniform(0, cell_size)
+            
+            # Compute cell indices for each point
+            cell_indices_x = np.floor((coordinates[:, 0] - x_offset) / cell_size).astype(int)
+            cell_indices_y = np.floor((coordinates[:, 1] - y_offset) / cell_size).astype(int)
+            cell_indices = np.vstack((cell_indices_x, cell_indices_y)).T
+            
+            # Count points in each cell
+            unique_cells, counts = np.unique(cell_indices, axis=0, return_counts=True)
+            cell_counts_dict = {tuple(cell): count for cell, count in zip(unique_cells, counts)}
+            
+            # Assign weights inversely proportional to the count in each cell
+            for i in range(n_points):
+                cell = (cell_indices_x[i], cell_indices_y[i])
+                weights[i] += 1.0 / cell_counts_dict[cell]
+        
+        # Average weights over all grid offsets
+        weights /= n_offsets
+        
+        # Normalize weights to sum to 1
+        weights /= np.sum(weights)
+        
+        self.declustering_weights = weights
+        
+    @staticmethod
+    @jit(nopython=True, parallel=True)
+    def generate_correlated_pairs(num_pairs, rho):    
+        """
+        Generate correlated standard normal pairs using Monte Carlo simulation. 
+        This function is JIT-compiled with Numba to improve performance.
+        """
+        y_ls1 = np.random.randn(num_pairs)
+        y_ls2 = np.random.randn(num_pairs)
+        y_l1 = y_ls1
+        y_l2 = y_ls1 * rho + y_ls2 * np.sqrt(1 - rho ** 2)
+        return y_l1, y_l2
+    
+    def back_transform_variogram(self, variogram_values, num_pairs=100000):
+        """
+        Back-transform the variogram from normal scores to original units using Monte Carlo simulation.
+        """
+        normal_scores = self.raster_data_handler.normal_scores
+        sorted_data = self.raster_data_handler.sorted_data
+        
+        # Precompute interpolation function for the back-transformation
+        percentiles = np.linspace(0, 1, len(normal_scores))
+        back_transform_func = interp1d(norm.cdf(normal_scores), sorted_data, bounds_error=False, fill_value=(sorted_data[0], sorted_data[-1]))
+        back_transformed_variogram = []
+        for gamma_Y in variogram_values:
+            rho = 1 - gamma_Y
+            # Step 1: Generate correlated pairs
+            y_l1, y_l2 = self.generate_correlated_pairs(num_pairs, rho)
+            
+            # Step 2: Vectorized back-transformation
+            z_l1 = back_transform_func(norm.cdf(y_l1))
+            z_l2 = back_transform_func(norm.cdf(y_l2))
+            
+            # Step 3: Compute the variogram in original units
+            gamma_Z_h = np.mean((z_l1 - z_l2) ** 2) / 2
+            back_transformed_variogram.append(gamma_Z_h)
+        
+        return np.array(back_transformed_variogram)
+    
+    def numba_variogram(self, area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights):
+        
+        self.raster_data_handler.sample_raster(area_side, samples_per_area, max_samples, normal_transform)
+        
+        if weights:
+            self.cell_declustering_weights(cell_size, n_offsets)
+        else:
+            self.declustering_weights = None
+        
         
         def pairwise_calc_python(coords, values):
             M = coords.shape[0]
@@ -434,7 +528,6 @@ class VariogramAnalysis:
                     distances[i, j] = np.sqrt(d)
             
             return distances, abs_differences
-
 
         # Pairwise distances and differences
         pairwise_calc_numba = njit(pairwise_calc_python)
@@ -502,7 +595,7 @@ class VariogramAnalysis:
 
         return bin_counts, variogram_matheron, n_bins, min_distance, max_distance
     
-    def calculate_mean_variogram_numba(self, area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs,max_lag_multiplier=1/3):
+    def calculate_mean_variogram_numba(self, area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs, cell_size, n_offsets, max_lag_multiplier=1/3, normal_transform = True, weights = True):
         """
         Calculates the mean variogram and its error from multiple sampling and calculation runs.
 
@@ -524,7 +617,7 @@ class VariogramAnalysis:
         
         for run in range(n_runs):
             # Calculate variogram for all runs
-            count, variogram, n_bins, min_distance, max_distance = self.numba_variogram(area_side, samples_per_area, max_samples, bin_width,max_lag_multiplier)
+            count, variogram, n_bins, min_distance, max_distance = self.numba_variogram(area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights)
             
             # Store the results
             all_variograms.loc[run, :variogram.size-1] = pd.Series(variogram).loc[:variogram.size-1]
@@ -539,6 +632,13 @@ class VariogramAnalysis:
         err_variogram = dropna(np.nanstd(all_variograms, axis=0))
         lags = np.linspace(bin_width / 2, (len(mean_variogram))*bin_width - bin_width / 2, len(mean_variogram))
         
+        #if normal_transform:
+        #    back_transformed_mean_variogram = self.back_transform_variogram(mean_variogram)
+        #    back_transformed_err_variogram = self.back_transform_variogram(err_variogram)
+        #    mean_variogram = back_transformed_mean_variogram
+        #    err_variogram = back_transformed_err_variogram
+        #else:
+        #    pass
         
         self.mean_variogram = mean_variogram
         self.err_variogram = err_variogram
@@ -615,6 +715,24 @@ class VariogramAnalysis:
             try:
                 popt, pcov = curve_fit(model_func, lags, mean_variogram, p0=p0, bounds=bounds, sigma=sigma_filtered, maxfev=10000)
                 
+                # Extract sill values
+                if config['nugget']:
+                    sills = popt[0:n]
+                else:
+                    sills = popt[0:n]
+                    
+                # Untransform sills to the original data space
+                #untransformed_sills = np.array([self.inverse_transform_table.get(sill, sill) for sill in sills])
+                err_sills = np.sqrt(np.diag(pcov)[0:n])
+                
+                # Untransform sill errors
+                #untransformed_err_sills = np.array([self.inverse_transform_table.get(sill + err, err) - untransformed_sill
+                #for sill, err, untransformed_sill in zip(sills, err_sills, untransformed_sills)]):
+                    # Store the untransformed sills and their errors
+                    #self.untransformed_sills = untransformed_sills
+                    #self.untransformed_err_sills = untransformed_err_sills
+                
+                
                 fitted_variogram = model_func(self.lags, *popt)
                 residuals = self.mean_variogram - fitted_variogram
                 n_data_points = len(self.mean_variogram)
@@ -686,6 +804,12 @@ class VariogramAnalysis:
 
             self.fitted_variogram = spherical_model_with_nugget(self.lags, *best_params) if best_model['nugget'] else spherical_model(self.lags, *best_params)
             
+            # Untransform sills, errors, and best nugget
+            #self.untransformed_sills = [self.inverse_transform_table.get(sill, sill) for sill in self.sills]
+            #self.untransformed_err_sills = [self.inverse_transform_table.get(sill + err, err) - self.inverse_transform_table.get(sill, sill) for sill, err in zip(self.sills, self.err_sills)]
+            #self.untransformed_sills_min = [self.inverse_transform_table.get(sill_min, sill_min) for sill_min in self.sills_min]
+            #self.untransformed_sills_max = [self.inverse_transform_table.get(sill_max, sill_max) for sill_max in self.sills_max]
+            #self.untransformed_best_nugget = self.inverse_transform_table.get(self.best_nugget, self.best_nugget) if config['nugget'] else None
         
     def plot_best_spherical_model(self):
         """
@@ -714,12 +838,7 @@ class VariogramAnalysis:
                 # Lighter lines at +/- 1 std error
                 ax[1].fill_betweenx([0, np.max(self.mean_variogram)], range_val - error_val, range_val + error_val, color=color, alpha=0.2)
 
-        # Plot the sills with error bounds if available
-        #if self.sills is not None and self.err_sills is not None:
-        #    for i, (sill_val, error_val) in enumerate(zip(self.sills, self.err_sills)):
-        #        ax[1].axhline(y=sill_val, color=colors[i], linestyle='-', lw=1, label=f'Sill {i+1}')
-        #        ax[1].fill_betweenx([sill_val - error_val, sill_val + error_val], 0, np.max(self.lags), color=colors[i], alpha=0.1)
-
+       
         # Check if a nugget effect was used
         if self.best_nugget is not None:
             ax[1].axhline(y=self.best_nugget, color='black', linestyle='--', lw=1, label='Nugget Effect')
