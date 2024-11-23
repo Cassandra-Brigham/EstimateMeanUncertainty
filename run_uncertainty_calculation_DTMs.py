@@ -1,8 +1,7 @@
-from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import numpy as np
+from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import os
 import argparse
-#from decimal import Decimal, getcontext
 
 
 def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem_resolution):
@@ -30,10 +29,10 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
     V = VariogramAnalysis(raster2_data_handler)
 
     #Calculate a mean variogram with 75 bins from variograms made over 10 runs
-    V.calculate_mean_variogram(75,10)
+    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 300, max_samples = 100000, bin_width = 30, max_n_bins = 3000, n_runs = 30, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1/2, normal_transform = False, weights = False)
 
-    #Fit a sum of three spherical models to the mean empirical variogram
-    V.fit_3_spherical_models_no_nugget()
+    #Fit a sum of up to three spherical models to the mean empirical variogram
+    V.fit_best_spherical_model()
 
     #Create an instance to calculate uncertainty values from raster data and variography
     uncertainty=UncertaintyCalculation(V)
@@ -56,56 +55,48 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
         os.makedirs("outputs/")
 
     #Plot and save modified raster
-    fig1=raster2_data_handler.plot_raster()
+    fig1=raster2_data_handler.plot_raster("Vertical differencing results corrected for vertical bias",normal_transform=False)
     fig1.savefig("outputs/modified_diff_raster_ground.png", dpi=300)
 
     # Plot and save stats
-    fig2=stats_dtm.plot_data_stats()
+    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = False)
     fig2.savefig("outputs/vert_diff_ground_stats_ground.png", dpi=300)
 
     # Plot and save variogram
-    fig3=V.plot_3_spherical_models_no_nugget()
+    fig3=V.plot_best_spherical_model()
     fig3.savefig("outputs/variogram_with_fit_ground.png", dpi=300)
 
     # Write output variables to text file
-    file_path = "outputs/uncertainty_estimation_output_ground.txt"
+    file_path = "outputs/uncertainty_estimation_output_ground.txt"  
     with open(file_path, 'w') as file:
         file.write("Output variables\n")
         file.write("\tArea\n")
-        file.write(f"\t\t{len(vert_diff_array_dtm)}"+unit+"^2\n")
+        file.write(f"\t\t{len(vert_diff_array_dtm)}" + unit + "^2\n")
         file.write("\tError\n")
-        file.write(f"\t\tVertical bias:{vertical_bias:.3f}"+unit+"\n")
-        file.write(f"\t\tUncertainty in the vertical bias:{median_uncertainty:.3f}"+unit+"\n")
+        file.write(f"\t\tVertical bias: {vertical_bias:.3f}" + unit + "\n")
+        file.write(f"\t\tUncertainty in the vertical bias: {median_uncertainty:.3f}" + unit + "\n")
         file.write("\tSpherical models\n")
-        file.write("\t\tSpherical model 1\n")
-        file.write(f"\t\t\tRange 1: {V.ranges[0]:.3f}"+unit+"\n")
-        file.write(f"\t\t\tSill 1: {V.sills[0]:.3f}\n")
-        file.write("\t\tSpherical model 2\n")
-        file.write(f"\t\t\tRange 2: {V.ranges[1]:.3f}"+unit+"\n")
-        file.write(f"\t\t\tSill 2: {V.sills[1]:.3f}\n")
-        file.write("\t\tSpherical model 3\n")
-        file.write(f"\t\t\tRange 3: {V.ranges[2]:.3f}"+unit+"\n")
-        file.write(f"\t\t\tSill 3: {V.sills[2]:.3f}\n")
+        
+        for i in range(len(V.ranges)):  # Dynamically iterate through the models
+            file.write(f"\t\tSpherical model {i + 1}\n")
+            file.write(f"\t\t\tRange {i + 1}: {V.ranges[i]:.3f}" + unit + "\n")
+            file.write(f"\t\t\tSill {i + 1}: {V.sills[i]:.3f}\n")
+        
         file.write("\tMean Uncertainty\n")
         file.write("\t\tMean, random, uncorrelated uncertainty\n")
-        file.write(f"\t\t\t{uncertainty.mean_random_uncorrelated:.3f}"+unit+"\n")
+        file.write(f"\t\t\t{uncertainty.mean_random_uncorrelated:.3f}" + unit + "\n")
+        
         file.write("\t\tMean, random, correlated uncertainty\n")
-        file.write(f"\t\t\tFrom model 1:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_1:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_1_min:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_1_max:.3f}"+unit+"\n")
-        file.write(f"\t\t\tFrom model 2:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_2:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_2_min:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_2_max:.3f}"+unit+"\n")
-        file.write(f"\t\t\tFrom model 3:\n")
-        file.write(f"\t\t\t\tOptimal:{uncertainty.mean_random_correlated_3:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMinimum:{uncertainty.mean_random_correlated_3_min:.3f}"+unit+"\n")
-        file.write(f"\t\t\t\tMaximum:{uncertainty.mean_random_correlated_3_max:.3f}"+unit+"\n")
+        for i in range(len(V.ranges)):  # Use the same number of models as before
+            file.write(f"\t\t\tFrom model {i + 1}:\n")
+            file.write(f"\t\t\t\tOptimal: {getattr(uncertainty, f'mean_random_correlated_{i + 1}'): .3f}" + unit + "\n")
+            file.write(f"\t\t\t\tMinimum: {getattr(uncertainty, f'mean_random_correlated_{i + 1}_min'): .3f}" + unit + "\n")
+            file.write(f"\t\t\t\tMaximum: {getattr(uncertainty, f'mean_random_correlated_{i + 1}_max'): .3f}" + unit + "\n")
+        
         file.write("\t\tTotal mean uncertainty\n")
-        file.write(f"\t\t\tOptimal:{uncertainty.total_mean_uncertainty:.3f}"+unit+"\n")
-        file.write(f"\t\t\tMinimum:{uncertainty.total_mean_uncertainty_min:.3f}"+unit+"\n")
-        file.write(f"\t\t\tMaximum:{uncertainty.total_mean_uncertainty_max:.3f}"+unit+"\n")
+        file.write(f"\t\t\tOptimal: {uncertainty.total_mean_uncertainty:.3f}" + unit + "\n")
+        file.write(f"\t\t\tMinimum: {uncertainty.total_mean_uncertainty_min:.3f}" + unit + "\n")
+        file.write(f"\t\t\tMaximum: {uncertainty.total_mean_uncertainty_max:.3f}" + unit + "\n")
     
 
 if __name__ == "__main__":
