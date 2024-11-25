@@ -1,6 +1,6 @@
 
-from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import numpy as np
+from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import os
 import argparse
 
@@ -33,10 +33,10 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
     V = VariogramAnalysis(raster2_data_handler)
 
     #Calculate a mean variogram with 75 bins from variograms made over 10 runs
-    V.calculate_mean_variogram(75,10)
+    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 300, max_samples = 100000, bin_width = 30, max_n_bins = 3000, n_runs = 30, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1/2, normal_transform = False, weights = False)
 
-    #Fit a sum of three spherical models to the mean empirical variogram
-    V.fit_3_spherical_models_no_nugget()
+    #Fit a sum of up to three spherical models to the mean empirical variogram
+    V.fit_best_spherical_model()
 
     #Create an instance to calculate uncertainty values from raster data and variography
     uncertainty=UncertaintyCalculation(V)
@@ -64,7 +64,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
     fig1.savefig("outputs/modified_diff_raster_1st_return.png", dpi=300)
 
     # Plot and save stats (ground)
-    fig2=stats_dtm.plot_data_stats()
+    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = False)
     fig2.savefig("outputs/vert_diff_ground_stats_1st_return.png", dpi=300)
 
     # Plot and save stats (1st return)
@@ -78,7 +78,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
     
     # Write output variables to text file
-    file_path = "outputs/output_variables_1st_return.txt"
+    file_path = "outputs/uncertainty_estimation_output_1st_return.txt"
     with open(file_path, 'w') as file:
         file.write("Output variables\n")
         file.write("\tArea\n")
