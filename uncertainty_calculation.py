@@ -11,7 +11,7 @@ from scipy.interpolate import interp1d
 import rasterio
 from rasterio import plot as rio_plot
 import rioxarray as rio
-from numba import njit, jit, prange
+from numba import njit, prange
 
 def dropna(array):
     """
@@ -647,10 +647,34 @@ class VariogramAnalysis:
                     distances[i, j] = np.sqrt(d)
             
             return distances, abs_differences
+        
+        @njit(parallel=True)
+        def compute_pairwise_numba(coords, values):
+            M = coords.shape[0]
+            distances = np.empty((M, M), dtype=np.float64)
+            abs_differences = np.empty((M, M), dtype=np.float64)
+            
+            for i in prange(M):
+                for j in range(i, M):  # Only compute upper triangle
+                    d = 0.0
+                    for k in range(coords.shape[1]):  # Iterate over dimensions
+                        tmp = coords[i, k] - coords[j, k]
+                        d += tmp * tmp
+                    dist = np.sqrt(d)
+                    distances[i, j] = dist
+                    distances[j, i] = dist  # Symmetric matrix
+                    
+                    diff = abs(values[i] - values[j])
+                    abs_differences[i, j] = diff
+                    abs_differences[j, i] = diff  # Symmetric matrix
+            
+            return distances, abs_differences
 
         # Pairwise distances and differences
-        pairwise_calc_numba = njit(pairwise_calc_python)
-        pairwise_distances, pairwise_abs_diff = pairwise_calc_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
+        #pairwise_calc_numba = njit(pairwise_calc_python)
+        #pairwise_distances, pairwise_abs_diff = pairwise_calc_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
+        
+        pairwise_distances, pairwise_abs_diff = compute_pairwise_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
 
         
         # Max distance and lag for binning
