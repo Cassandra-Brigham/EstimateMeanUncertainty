@@ -29,10 +29,14 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
     V = VariogramAnalysis(raster2_data_handler)
 
     #Calculate a mean variogram with 75 bins from variograms made over 10 runs
-    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 300, max_samples = 100000, bin_width = 30, max_n_bins = 3000, n_runs = 30, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1/2, normal_transform = False, weights = False)
+    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 500, max_samples = 100000, bin_width = 30, max_n_bins = 3000, n_runs = 30, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1, normal_transform = False, weights = False)
 
     #Fit a sum of up to three spherical models to the mean empirical variogram
     V.fit_best_spherical_model()
+    
+    #Get the number of models and nugget value, if exists
+    n_models = len(V.ranges)
+    nugget = V.best_nugget
 
     #Create an instance to calculate uncertainty values from raster data and variography
     uncertainty=UncertaintyCalculation(V)
@@ -59,7 +63,7 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
     fig1.savefig("outputs/modified_diff_raster_ground.png", dpi=300)
 
     # Plot and save stats
-    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = False)
+    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = True)
     fig2.savefig("outputs/vert_diff_ground_stats_ground.png", dpi=300)
 
     # Plot and save variogram

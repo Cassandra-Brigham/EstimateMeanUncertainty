@@ -37,6 +37,10 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
     #Fit a sum of up to three spherical models to the mean empirical variogram
     V.fit_best_spherical_model()
+    
+    #Get the number of models and nugget value, if exists
+    n_models = len(V.ranges)
+    nugget = V.best_nugget
 
     #Create an instance to calculate uncertainty values from raster data and variography
     uncertainty=UncertaintyCalculation(V)
