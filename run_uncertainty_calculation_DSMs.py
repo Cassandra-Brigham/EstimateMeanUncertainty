@@ -73,7 +73,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
     fig3.savefig("outputs/vert_diff_1st_returns_stats_1st_return.png", dpi=300)
 
     # Plot and save variogram
-    fig4=V.plot_3_spherical_models_no_nugget()
+    fig4=V.plot_best_spherical_model()
     fig4.savefig("outputs/variogram_with_fit_1st_return.png", dpi=300)
 
     
