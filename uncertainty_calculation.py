@@ -31,17 +31,37 @@ def dropna(array):
 
 class RasterDataHandler:
     """
-    A class used to loading vertical differencing raster data, 
-    subtracting a vertical systematic error from from the raster, and randomly sampling the raster data for further analysis.
+    A class used for loading vertical differencing raster data, 
+    subtracting a vertical systematic error from the raster, and randomly sampling the raster data for further analysis.
 
     Attributes:
     -----------
     raster_path : str
         The file path to the raster data.
-    rioxarray_obj : rio.xarray_raster.Raster
+    unit : str
+        The unit of measurement for the raster data.
+    resolution : float
+        The resolution of the raster data.
+    rioxarray_obj : rioxarray.DataArray
         The rioxarray object holding the raster data.
     data_array : numpy.ndarray
         The loaded raster data as a numpy array, excluding NaN values.
+    transformed_values : numpy.ndarray
+        The transformed values after applying a normal score transform.
+    sorted_data : numpy.ndarray
+        The sorted data used for normal score transformation.
+    normal_scores : numpy.ndarray
+        The normal scores corresponding to the sorted data.
+    samples : numpy.ndarray
+        The sampled values from the raster data.
+    coords : numpy.ndarray
+        The coordinates of the sampled values.
+    normal_transform_raster_path : str
+        The file path to the raster with normal score transformed values.
+    normal_transform_rioxarray_obj : rioxarray.DataArray
+        The rioxarray object holding the normal score transformed raster data.
+    normal_transform_data_array : numpy.ndarray
+        The normal score transformed raster data as a numpy array, excluding NaN values.
 
     Methods:
     --------
@@ -49,7 +69,15 @@ class RasterDataHandler:
         Loads the raster data from the given path, optionally applying a mask to exclude NaN values.
     subtract_value_from_raster(output_raster_path, value_to_subtract)
         Subtracts a given value from the raster data and saves the result to a new file.
-    sample_raster(samples_per_sq_km, max_samples)
+    normal_score_transform(data)
+        Transforms the data to normal scores using rank-based empirical CDF.
+    map_transformed_values_to_raster(output_raster_normal_transform)
+        Maps the transformed values back to a rioxarray DataArray of the original size and resolution.
+    transform_data(output_normal_transform_raster_path)
+        Transforms the data using the normal score transform.
+    plot_raster(plot_title, normal_transform=True)
+        Plots a raster image using the rioxarray object.
+    sample_raster(area_side, samples_per_area, max_samples, normal_transform=True)
         Samples the raster data based on a given density and maximum number of samples, returning the sample values and their coordinates.
     """
     def __init__(self, raster_path, unit, resolution):
@@ -168,6 +196,14 @@ class RasterDataHandler:
         self.normal_transform_data_array = self.normal_transform_rioxarray_obj.data[~np.isnan(self.normal_transform_rioxarray_obj.data)].flatten()
         
     def plot_raster(self, plot_title, normal_transform=True):
+        """
+        Plots a raster image using the rioxarray object.
+        Parameters:
+        plot_title (str): The title of the plot.
+        normal_transform (bool): If True, applies a normal score transformation to the rioxarray object before plotting. Defaults to True.
+        Returns:
+        matplotlib.figure.Figure: The figure object containing the plot.
+        """
         if normal_transform:
             rio_data = self.normal_transform_rioxarray_obj
             title = plot_title+" - Normal Score Transformed"
@@ -238,13 +274,19 @@ class StatisticalAnalysis:
     """
     A class to perform statistical analysis on data, including plotting data statistics and estimating the uncertainty of the median value of the data using bootstrap resampling with subsamples of the data.
 
+    Attributes:
+    -----------
+    raster_data_handler : RasterDataHandler
+        An instance of RasterDataHandler to manage raster data operations.
+
     Methods:
     --------
-    plot_data_stats(data):
-        Plots the histogram of the data and overlays statistical measures like mean, median, and mode.
-    bootstrap_uncertainty_subsample(data, n_bootstrap=1000, subsample_proportion=0.1):
+    plot_data_stats(normal_transform=True, filtered=True)
+        Plots the histogram of the raster data with exploratory statistics.
+    bootstrap_uncertainty_subsample(n_bootstrap=1000, subsample_proportion=0.1)
         Estimates the uncertainty of the median value of the data using bootstrap resampling.
     """
+    
     def __init__(self, raster_data_handler):
         """
         Parameters:
@@ -256,6 +298,29 @@ class StatisticalAnalysis:
 
     
     def plot_data_stats(self, normal_transform = True, filtered = True):
+        """
+        Plots the histogram of the raster data with exploratory statistics.
+        Parameters:
+        -----------
+        normal_transform : bool, optional
+            If True, use the normal transformed data array. If False, use the original data array.
+            Default is True.
+        filtered : bool, optional
+            If True, filter the data to exclude outliers (1st and 99th percentiles) for better visualization.
+            If False, use the unfiltered data. Default is True.
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The matplotlib figure object containing the histogram and statistics.
+        Notes:
+        ------
+        - The function calculates and displays the mean, median, mode(s), minimum, maximum, 
+            1st quartile, and 3rd quartile of the data.
+        - The mode(s) are displayed as vertical dashed lines on the histogram.
+        - A text box with the calculated statistics is added to the plot.
+        - The histogram is plotted with 60 bins and the data is optionally filtered to exclude 
+            outliers for better visualization.
+        """
         if normal_transform:
             data = self.raster_data_handler.normal_transform_data_array
         else:
@@ -373,12 +438,20 @@ class VariogramAnalysis:
 
     Methods:
     --------
-    calculate_mean_variogram(n_bins, n_runs)
-        Calculates the mean variogram and its error from multiple runs.
-    fit_3_spherical_models_no_nugget()
-        Fits three spherical models without a nugget effect to the mean variogram.
-    plot_3_spherical_models_no_nugget()
-        Plots the mean variogram, its error, and the fitted model.
+    cell_declustering_weights(cell_size, n_offsets)
+        Calculate declustering weights using cell declustering.
+    generate_correlated_pairs(num_pairs, rho)
+        Generate correlated standard normal pairs using Monte Carlo simulation.
+    back_transform_variogram(variogram_values, num_pairs=100000)
+        Back-transform the variogram from normal scores to original units using Monte Carlo simulation.
+    numba_variogram(area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights)
+        Calculate the variogram using Numba for performance optimization.
+    calculate_mean_variogram_numba(area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs, cell_size, n_offsets, max_lag_multiplier=1/3, normal_transform=True, weights=True)
+        Calculate the mean variogram using numba for multiple runs.
+    fit_best_spherical_model()
+        Fits the best spherical model to the variogram data.
+    plot_best_spherical_model()
+        Plots the best spherical model for the variogram analysis.
     """
     def __init__(self, raster_data_handler):
         """
@@ -463,7 +536,7 @@ class VariogramAnalysis:
         self.declustering_weights = weights
         
     @staticmethod
-    @jit(nopython=True, parallel=True)
+    @njit(nopython=True, parallel=True)
     def generate_correlated_pairs(num_pairs, rho):    
         """
         Generate correlated standard normal pairs using Monte Carlo simulation. 
@@ -502,6 +575,41 @@ class VariogramAnalysis:
         return np.array(back_transformed_variogram)
     
     def numba_variogram(self, area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights):
+        """
+        Calculate the variogram using Numba for performance optimization.
+        Parameters:
+        -----------
+        area_side : float
+            The side length of the area to sample.
+        samples_per_area : int
+            The number of samples to take per area.
+        max_samples : int
+            The maximum number of samples to take.
+        bin_width : float
+            The width of the bins for distance binning.
+        cell_size : float
+            The size of the cell for declustering.
+        n_offsets : int
+            The number of offsets for declustering.
+        max_lag_multiplier : str or float
+            The multiplier for the maximum lag distance. Can be "median", "max", or a float value.
+        normal_transform : bool
+            Whether to apply a normal transformation to the data.
+        weights : bool
+            Whether to apply declustering weights.
+        Returns:
+        --------
+        bin_counts : numpy.ndarray
+            The counts of pairs in each bin.
+        variogram_matheron : numpy.ndarray
+            The calculated variogram values for each bin.
+        n_bins : int
+            The number of bins used.
+        min_distance : float
+            The minimum distance considered.
+        max_distance : float
+            The maximum distance considered.
+        """
         
         self.raster_data_handler.sample_raster(area_side, samples_per_area, max_samples, normal_transform)
         
@@ -512,6 +620,17 @@ class VariogramAnalysis:
         
         
         def pairwise_calc_python(coords, values):
+            """
+            Calculate pairwise distances and absolute differences between points.
+            Parameters:
+            coords (numpy.ndarray): A 2D array of shape (M, N) representing the coordinates of M points in N-dimensional space.
+            values (numpy.ndarray): A 1D array of shape (M,) representing the values associated with each point.
+            Returns:
+            tuple: A tuple containing two 2D numpy arrays:
+                - distances (numpy.ndarray): A 2D array of shape (M, M) where distances[i, j] is the Euclidean distance between point i and point j.
+                - abs_differences (numpy.ndarray): A 2D array of shape (M, M) where abs_differences[i, j] is the absolute difference between the values of point i and point j.
+            """
+            
             M = coords.shape[0]
             N = coords.shape[1]
             
@@ -532,6 +651,7 @@ class VariogramAnalysis:
         # Pairwise distances and differences
         pairwise_calc_numba = njit(pairwise_calc_python)
         pairwise_distances, pairwise_abs_diff = pairwise_calc_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
+
         
         # Max distance and lag for binning
         max_distance = np.max(pairwise_distances)
@@ -559,6 +679,29 @@ class VariogramAnalysis:
         
         @njit
         def populate_bins_unique_numba(bin_indices, pairwise_abs_diff, differences, bin_counts, num_points, n_bins):
+            """
+            Populate bins with unique pairwise absolute differences using Numba for optimization.
+
+            Parameters:
+            -----------
+            bin_indices : ndarray
+                A 2D array of bin indices for each pair of points.
+            pairwise_abs_diff : ndarray
+                A 2D array of pairwise absolute differences.
+            differences : ndarray
+                A 2D array to store the differences for each bin.
+            bin_counts : ndarray
+                A 1D array to count the number of elements in each bin.
+            num_points : int
+                The number of points.
+            n_bins : int
+                The number of bins.
+
+            Returns:
+            --------
+            tuple
+                Updated bin_counts and differences arrays.
+            """
             # Populate bins without using a list of arrays
             for i in range(num_points):
                 for j in range(i + 1, num_points):  # Only calculate upper triangle to avoid redundancy
@@ -578,6 +721,18 @@ class VariogramAnalysis:
         
         #@njit
         def matheron(x):
+            """
+            Calculate the Matheron estimator for a given array.
+
+            The Matheron estimator is used to estimate the variance of a sample.
+            This function prevents a ZeroDivisionError by returning NaN if the input array is empty.
+
+            Parameters:
+            x (numpy.ndarray): Input array for which the Matheron estimator is calculated.
+
+            Returns:
+            float: The Matheron estimator value. Returns NaN if the input array is empty.
+            """
             # prevent ZeroDivisionError
             if x.size == 0:
                 return np.nan
@@ -596,16 +751,48 @@ class VariogramAnalysis:
         return bin_counts, variogram_matheron, n_bins, min_distance, max_distance
     
     def calculate_mean_variogram_numba(self, area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs, cell_size, n_offsets, max_lag_multiplier=1/3, normal_transform = True, weights = True):
+        
         """
-        Calculates the mean variogram and its error from multiple sampling and calculation runs.
-
+        Calculate the mean variogram using numba for multiple runs.
         Parameters:
         -----------
-        n_bins : int
-            The number of bins to divide the distance range into for variogram calculation.
+        area_side : float
+            The side length of the area to be sampled.
+        samples_per_area : int
+            The number of samples to be taken per area.
+        max_samples : int
+            The maximum number of samples to be taken.
+        bin_width : float
+            The width of each bin for the variogram.
+        max_n_bins : int
+            The maximum number of bins for the variogram.
         n_runs : int
-            The number of runs to perform for sampling and variogram calculation.
+            The number of runs to perform for averaging.
+        cell_size : float
+            The size of each cell in the grid.
+        n_offsets : int
+            The number of offsets to use in the variogram calculation.
+        max_lag_multiplier : float, optional
+            The maximum lag distance as a fraction of the area side length (default is 1/3).
+        normal_transform : bool, optional
+            Whether to apply a normal transformation to the data (default is True).
+        weights : bool, optional
+            Whether to use weights in the variogram calculation (default is True).
+        Returns:
+        --------
+        None
+        Attributes:
+        -----------
+        mean_variogram : numpy.ndarray
+            The mean variogram calculated across all runs.
+        err_variogram : numpy.ndarray
+            The standard deviation of the variogram across all runs.
+        mean_count : numpy.ndarray
+            The mean count of pairs in each bin across all runs.
+        lags : numpy.ndarray
+            The lag distances corresponding to the variogram bins.
         """
+        
         # Initialize DataFrames and arrays
         all_variograms = pd.DataFrame(np.nan, index=range(n_runs), columns=range(max_n_bins))
         counts = pd.DataFrame(np.nan, index=range(n_runs), columns=range(max_n_bins))
@@ -632,26 +819,62 @@ class VariogramAnalysis:
         err_variogram = dropna(np.nanstd(all_variograms, axis=0))
         lags = np.linspace(bin_width / 2, (len(mean_variogram))*bin_width - bin_width / 2, len(mean_variogram))
         
-        #if normal_transform:
-        #    back_transformed_mean_variogram = self.back_transform_variogram(mean_variogram)
-        #    back_transformed_err_variogram = self.back_transform_variogram(err_variogram)
-        #    mean_variogram = back_transformed_mean_variogram
-        #    err_variogram = back_transformed_err_variogram
-        #else:
-        #    pass
-        
         self.mean_variogram = mean_variogram
         self.err_variogram = err_variogram
         self.mean_count = mean_count
         self.lags = lags
-    
     def fit_best_spherical_model(self):
         """
-        Fits nested spherical models with 1, 2, and 3 components, both with and without a nugget effect.
-        Selects and saves the parameters of the model with the lowest AIC.
-        Additionally, returns RMSE, errors for ranges and sills, and other model details.
+        Fits the best spherical model to the variogram data.
+        This method evaluates multiple spherical model configurations with and without a nugget effect,
+        and selects the best model based on the Akaike Information Criterion (AIC). The spherical model
+        is commonly used in geostatistics to describe spatial correlation.
+        The method iterates over different configurations, fits the models using non-linear least squares,
+        and computes various metrics such as AIC, RMSE, and parameter uncertainties. The best model and
+        its parameters are stored in the instance attributes.
+        Attributes:
+        self.lags (array-like): Array of lag distances.
+        self.mean_variogram (array-like): Array of mean variogram values.
+        self.err_variogram (array-like): Array of variogram errors.
+        Updates the following instance attributes:
+        self.best_aic (float): The best AIC value found.
+        self.best_params (array-like): The best-fit parameters for the selected model.
+        self.best_model_config (dict): Configuration of the best model.
+        self.best_rmse (float): Root Mean Square Error of the best model.
+        self.best_err_param (array-like): Uncertainties of the best-fit parameters.
+        self.best_rmse_filtered (float): RMSE of the best model with filtered data.
+        self.ranges (array-like): Range parameters of the best model.
+        self.err_ranges (array-like): Uncertainties of the range parameters.
+        self.sills (array-like): Sill parameters of the best model.
+        self.err_sills (array-like): Uncertainties of the sill parameters.
+        self.ranges_min (array-like): Minimum range values considering uncertainties.
+        self.ranges_max (array-like): Maximum range values considering uncertainties.
+        self.sills_min (array-like): Minimum sill values considering uncertainties.
+        self.sills_max (array-like): Maximum sill values considering uncertainties.
+        self.best_nugget (float or None): Nugget effect of the best model, if applicable.
+        self.fitted_variogram (array-like): Fitted variogram values using the best model.
+        Raises:
+        RuntimeError: If the model fitting fails for a particular configuration.
         """
+        
         def spherical_model(h, *params):
+            """
+            Computes the spherical model for given distances and parameters.
+
+            The spherical model is commonly used in geostatistics to describe spatial 
+            correlation. It is defined piecewise, with different formulas for distances 
+            less than or equal to the range parameter and for distances greater than the 
+            range parameter.
+
+            Parameters:
+            h (array-like): Array of distances at which to evaluate the model.
+            *params: Variable length argument list containing the sill and range parameters.
+                     The first half of the parameters are the sills (C), and the second half 
+                     are the ranges (a). The number of sills and ranges should be equal.
+
+            Returns:
+            numpy.ndarray: Array of model values corresponding to the input distances.
+            """
             n = len(params) // 2
             C = params[:n]
             a = params[n:]
@@ -663,6 +886,22 @@ class VariogramAnalysis:
             return model
 
         def spherical_model_with_nugget(h, nugget, *params):
+            """
+            Computes the spherical model with a nugget effect.
+
+            The spherical model is a type of variogram model used in geostatistics.
+            This function adds a nugget effect to the spherical model.
+
+            Parameters:
+            h (array-like): Array of distances at which to evaluate the model.
+            nugget (float): The nugget effect, representing the discontinuity at the origin.
+            *params: Variable length argument list containing the sill and range parameters.
+                     The first half of the parameters are the sills (C), and the second half 
+                     are the ranges (a). The number of sills and ranges should be equal.
+
+            Returns:
+            numpy.ndarray: Array of model values corresponding to the input distances.
+            """
             return nugget + spherical_model(h, *params)
         
         lags = self.lags
@@ -813,9 +1052,21 @@ class VariogramAnalysis:
         
     def plot_best_spherical_model(self):
         """
-        Plots the mean variogram with error bars, the fitted spherical model, and annotations for ranges and sills.
-        This visualization helps in understanding the spatial structure of the data, including both AIC and RMSE metrics.
+        Plots the best spherical model for the variogram analysis.
+        This function generates a two-panel plot:
+        - The top panel displays a histogram of semivariance counts.
+        - The bottom panel shows the mean variogram with error bars, the fitted model, range values with their errors, and the nugget effect if applicable.
+        The plot includes:
+        - A histogram of semivariance counts in the top panel.
+        - The mean variogram with error bars indicating the spread over multiple runs.
+        - The fitted variogram model if available.
+        - Vertical lines indicating range values and shaded areas representing their errors.
+        - A horizontal line indicating the nugget effect if used.
+        - The RMSE value in the title of the bottom panel.
+        Returns:
+            fig (matplotlib.figure.Figure): The figure object containing the plot.
         """
+        
         fig, ax = plt.subplots(2, 1, gridspec_kw={'height_ratios': [1, 3]}, figsize=(10, 8))
         
          # Histogram of semivariance counts
@@ -875,28 +1126,67 @@ class UncertaintyCalculation:
         The mean random uncertainty correlated to the second spherical model.
     mean_random_correlated_3 : float
         The mean random uncertainty correlated to the third spherical model.
+    mean_random_correlated_1_min : float
+        The minimum mean random uncertainty correlated to the first spherical model.
+    mean_random_correlated_2_min : float
+        The minimum mean random uncertainty correlated to the second spherical model.
+    mean_random_correlated_3_min : float
+        The minimum mean random uncertainty correlated to the third spherical model.
+    mean_random_correlated_1_max : float
+        The maximum mean random uncertainty correlated to the first spherical model.
+    mean_random_correlated_2_max : float
+        The maximum mean random uncertainty correlated to the second spherical model.
+    mean_random_correlated_3_max : float
+        The maximum mean random uncertainty correlated to the third spherical model.
     total_mean_uncertainty : float
         The total mean uncertainty calculated as a combination of uncorrelated and correlated uncertainties.
+    total_mean_uncertainty_min : float
+        The minimum total mean uncertainty calculated as a combination of uncorrelated and correlated uncertainties.
+    total_mean_uncertainty_max : float
+        The maximum total mean uncertainty calculated as a combination of uncorrelated and correlated uncertainties.
+    area : float
+        The area associated with the uncertainty calculation.
 
     Methods:
     --------
     calc_mean_random_uncorrelated()
-        Calculates the mean random uncertainty not correlated to any spatial structure.
-    calc_mean_random_correlated(dem_resolution=1)
-        Calculates the mean random uncertainty correlated with the spatial structure defined by the variogram's spherical models.
+        Calculates the mean random uncorrelated uncertainty.
+    calc_mean_random_correlated()
+        Calculates the mean random correlated uncertainties for each spherical model component.
+    calc_mean_random_correlated_min()
+        Calculates the mean random correlated uncertainties for the minimum sills of the variogram analysis.
+    calc_mean_random_correlated_max()
+        Calculates the mean random correlated uncertainties for the maximum sills of the variogram analysis.
     calc_total_mean_uncertainty()
-        Calculates the total mean uncertainty, combining both correlated and uncorrelated uncertainties.
+        Calculates the total mean uncertainty by adding in quadrature the uncertainties (both correlated and uncorrelated).
+    calc_total_mean_uncertainty_min()
+        Calculates the minimum total mean uncertainty by adding in quadrature the uncertainties (both minimum correlated and uncorrelated).
+    calc_total_mean_uncertainty_max()
+        Calculates the maximum total mean uncertainty by adding in quadrature the uncertainties (both maximum correlated and uncorrelated).
     """
 
     def __init__(self, variogram_analysis):
         """
-        Initializes the UncertaintyCalculation class with a VariogramAnalysis instance.
-
+        Initialize the UncertaintyCalculation class with a variogram analysis object.
         Parameters:
-        -----------
-        variogram_analysis : VariogramAnalysis
-            An instance of VariogramAnalysis for accessing variogram results and model parameters.
+        variogram_analysis (object): An object containing variogram analysis data.
+        Attributes:
+        mean_random_uncorrelated (float or None): Mean random uncorrelated uncertainty.
+        mean_random_correlated_1 (float or None): Mean random correlated uncertainty for the first correlation.
+        mean_random_correlated_2 (float or None): Mean random correlated uncertainty for the second correlation.
+        mean_random_correlated_3 (float or None): Mean random correlated uncertainty for the third correlation.
+        mean_random_correlated_1_min (float or None): Minimum mean random correlated uncertainty for the first correlation.
+        mean_random_correlated_2_min (float or None): Minimum mean random correlated uncertainty for the second correlation.
+        mean_random_correlated_3_min (float or None): Minimum mean random correlated uncertainty for the third correlation.
+        mean_random_correlated_1_max (float or None): Maximum mean random correlated uncertainty for the first correlation.
+        mean_random_correlated_2_max (float or None): Maximum mean random correlated uncertainty for the second correlation.
+        mean_random_correlated_3_max (float or None): Maximum mean random correlated uncertainty for the third correlation.
+        total_mean_uncertainty (float or None): Total mean uncertainty.
+        total_mean_uncertainty_min (float or None): Minimum total mean uncertainty.
+        total_mean_uncertainty_max (float or None): Maximum total mean uncertainty.
+        area (float or None): Area associated with the uncertainty calculation.
         """
+        
         self.variogram_analysis = variogram_analysis
         # Initialize all uncertainty attributes to None.
         self.mean_random_uncorrelated = None
@@ -916,9 +1206,16 @@ class UncertaintyCalculation:
 
     def calc_mean_random_uncorrelated(self):
         """
-        Calculates the mean random uncertainty not correlated to any spatial structure,
-        based on the standard deviation of the data and the number of data points.
+        Calculate the mean random uncorrelated uncertainty.
+        This method calculates the mean random uncorrelated uncertainty by 
+        performing the following steps:
+        1. Retrieve the data array from the variogram analysis raster data handler.
+        2. Define a nested function to calculate the Root Mean Square (RMS) of an array of numbers.
+        3. Use the nested function to calculate the RMS of the data array.
+        4. Compute the mean random uncorrelated uncertainty by dividing the RMS by the square root of the length of the data array.
+        The result is stored in the `mean_random_uncorrelated` attribute of the instance.
         """
+        
         data = self.variogram_analysis.raster_data_handler.data_array
 
         def calculate_rms(values):
@@ -940,10 +1237,24 @@ class UncertaintyCalculation:
 
     def calc_mean_random_correlated(self):
         """
-        Calculates the mean random uncertainties correlated with the spatial structure defined by
-        the variogram's spherical models.
-
+        Calculate the mean random correlated uncertainties for each spherical model component.
+        This method computes the correlated uncertainties based on the variogram analysis 
+        parameters such as sills and ranges, and the resolution of the raster data. The 
+        uncertainties are calculated for up to three spherical model components if available.
+        Attributes:
+        -----------
+        mean_random_correlated_1 : float
+            The mean random correlated uncertainty for the first spherical model component.
+        mean_random_correlated_2 : float, optional
+            The mean random correlated uncertainty for the second spherical model component, 
+            if available.
+        mean_random_correlated_3 : float, optional
+            The mean random correlated uncertainty for the third spherical model component, 
+            if available.
+        area : float
+            The total area covered by the raster data.
         """
+        
         dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
@@ -956,9 +1267,19 @@ class UncertaintyCalculation:
 
     def calc_mean_random_correlated_min(self):
         """
-        Calculates the minimum mean random uncertainties correlated with the spatial structure defined by
-        the variogram's spherical models, as defined by the optimal range and sill values minus 1 std error.
+        Calculate the mean random correlated uncertainties for the minimum sills of the variogram analysis.
+        This method calculates the mean random correlated uncertainties for each spherical model component
+        based on the minimum sills and ranges from the variogram analysis. The calculation is performed
+        only if the sill value is greater than zero. The results are stored in the attributes:
+        `mean_random_correlated_1_min`, `mean_random_correlated_2_min`, and `mean_random_correlated_3_min`.
+        Attributes:
+            mean_random_correlated_1_min (float): Mean random correlated uncertainty for the first spherical model component.
+            mean_random_correlated_2_min (float): Mean random correlated uncertainty for the second spherical model component.
+            mean_random_correlated_3_min (float): Mean random correlated uncertainty for the third spherical model component.
+        Returns:
+            None
         """
+        
         dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
@@ -979,9 +1300,27 @@ class UncertaintyCalculation:
 
     def calc_mean_random_correlated_max(self):
         """
-        Calculates the maximum mean random uncertainties correlated with the spatial structure defined by
-        the variogram's spherical models, as defined by the optimal range and sill values plus 1 std error.
+        Calculate the mean random correlated uncertainties for each spherical model component.
+        This method computes the mean random correlated uncertainties using the maximum sills and ranges
+        from the variogram analysis. The calculation is performed for each spherical model component
+        present in the variogram analysis.
+        The formula used for the calculation is:
+        mean_random_correlated = (sqrt(2 * sill) / sqrt(len(data))) * sqrt((pi * range^2) / (5 * dem_resolution^2))
+        Attributes:
+        -----------
+        mean_random_correlated_1_max : float
+            The mean random correlated uncertainty for the first spherical model component.
+        mean_random_correlated_2_max : float, optional
+            The mean random correlated uncertainty for the second spherical model component, if present.
+        mean_random_correlated_3_max : float, optional
+            The mean random correlated uncertainty for the third spherical model component, if present.
+        Notes:
+        ------
+        - The method assumes that the variogram analysis has at least one spherical model component.
+        - The method updates the instance attributes `mean_random_correlated_1_max`, `mean_random_correlated_2_max`,
+          and `mean_random_correlated_3_max` based on the number of spherical model components.
         """
+        
         dem_resolution = self.variogram_analysis.raster_data_handler.resolution
         data = self.variogram_analysis.raster_data_handler.data_array
         # Calculate correlated uncertainties for each spherical model component.
@@ -1023,4 +1362,3 @@ class UncertaintyCalculation:
             self.total_mean_uncertainty_max = np.sqrt(np.square(self.mean_random_uncorrelated) + np.square(self.mean_random_correlated_1_max) + np.square(self.mean_random_correlated_2_max))
         elif len(self.variogram_analysis.ranges) ==3:
             self.total_mean_uncertainty_max = np.sqrt(np.square(self.mean_random_uncorrelated) + np.square(self.mean_random_correlated_1_max) + np.square(self.mean_random_correlated_2_max) + np.square(self.mean_random_correlated_3_max))
-
