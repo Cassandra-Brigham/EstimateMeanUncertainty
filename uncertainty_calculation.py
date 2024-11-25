@@ -536,7 +536,7 @@ class VariogramAnalysis:
         self.declustering_weights = weights
         
     @staticmethod
-    @njit(nopython=True, parallel=True)
+    @njit(parallel=True)
     def generate_correlated_pairs(num_pairs, rho):    
         """
         Generate correlated standard normal pairs using Monte Carlo simulation. 
@@ -619,35 +619,6 @@ class VariogramAnalysis:
             self.declustering_weights = None
         
         
-        def pairwise_calc_python(coords, values):
-            """
-            Calculate pairwise distances and absolute differences between points.
-            Parameters:
-            coords (numpy.ndarray): A 2D array of shape (M, N) representing the coordinates of M points in N-dimensional space.
-            values (numpy.ndarray): A 1D array of shape (M,) representing the values associated with each point.
-            Returns:
-            tuple: A tuple containing two 2D numpy arrays:
-                - distances (numpy.ndarray): A 2D array of shape (M, M) where distances[i, j] is the Euclidean distance between point i and point j.
-                - abs_differences (numpy.ndarray): A 2D array of shape (M, M) where abs_differences[i, j] is the absolute difference between the values of point i and point j.
-            """
-            
-            M = coords.shape[0]
-            N = coords.shape[1]
-            
-            distances = np.empty((M, M), dtype=np.float64)
-            abs_differences = np.empty((M, M), dtype=np.float64)
-            
-            for i in range(M):
-                for j in range(M):
-                    d = 0.0
-                    abs_differences[i, j] = abs(values[i] - values[j])
-                    for k in range(N):
-                        tmp = coords[i, k] - coords[j, k]
-                        d += tmp * tmp
-                    distances[i, j] = np.sqrt(d)
-            
-            return distances, abs_differences
-        
         @njit(parallel=True)
         def compute_pairwise_numba(coords, values):
             M = coords.shape[0]
@@ -701,7 +672,7 @@ class VariogramAnalysis:
         bin_counts = np.zeros(n_bins, dtype=np.int32)  # Track counts per bin
         variogram_matheron = np.zeros(n_bins, dtype=np.float64)  # Store variogram values
         
-        @njit
+        @njit(parallel=True)
         def populate_bins_unique_numba(bin_indices, pairwise_abs_diff, differences, bin_counts, num_points, n_bins):
             """
             Populate bins with unique pairwise absolute differences using Numba for optimization.
@@ -727,7 +698,7 @@ class VariogramAnalysis:
                 Updated bin_counts and differences arrays.
             """
             # Populate bins without using a list of arrays
-            for i in range(num_points):
+            for i in prange(num_points):
                 for j in range(i + 1, num_points):  # Only calculate upper triangle to avoid redundancy
                     bin_idx = bin_indices[i, j]
                     if bin_idx < n_bins:
@@ -743,7 +714,7 @@ class VariogramAnalysis:
         # Trim excess zeros from 'differences'
         trimmed_differences = [differences[b][:bin_counts[b]] for b in range(n_bins)]
         
-        #@njit
+        @njit(parallel=True, fastmath=True)
         def matheron(x):
             """
             Calculate the Matheron estimator for a given array.
@@ -767,11 +738,7 @@ class VariogramAnalysis:
         for i in prange(n_bins):
             #variogram_dowd[i] = 2.198 * np.nanmedian(trimmed_differences[i]) ** 2 / 2
             variogram_matheron[i] = matheron(trimmed_differences[i])
-        
-        for i in prange(n_bins):
-            variogram_matheron[i] = (1. / (2 * trimmed_differences[i].size)) * np.sum(np.power(trimmed_differences[i], 2))
             
-
         return bin_counts, variogram_matheron, n_bins, min_distance, max_distance
     
     def calculate_mean_variogram_numba(self, area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs, cell_size, n_offsets, max_lag_multiplier=1/3, normal_transform = True, weights = True):
