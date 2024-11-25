@@ -640,10 +640,6 @@ class VariogramAnalysis:
                     abs_differences[j, i] = diff  # Symmetric matrix
             
             return distances, abs_differences
-
-        # Pairwise distances and differences
-        #pairwise_calc_numba = njit(pairwise_calc_python)
-        #pairwise_distances, pairwise_abs_diff = pairwise_calc_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
         
         pairwise_distances, pairwise_abs_diff = compute_pairwise_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
 
@@ -814,6 +810,7 @@ class VariogramAnalysis:
         self.err_variogram = err_variogram
         self.mean_count = mean_count
         self.lags = lags
+        
     def fit_best_spherical_model(self):
         """
         Fits the best spherical model to the variogram data.
@@ -1034,12 +1031,7 @@ class VariogramAnalysis:
 
             self.fitted_variogram = spherical_model_with_nugget(self.lags, *best_params) if best_model['nugget'] else spherical_model(self.lags, *best_params)
             
-            # Untransform sills, errors, and best nugget
-            #self.untransformed_sills = [self.inverse_transform_table.get(sill, sill) for sill in self.sills]
-            #self.untransformed_err_sills = [self.inverse_transform_table.get(sill + err, err) - self.inverse_transform_table.get(sill, sill) for sill, err in zip(self.sills, self.err_sills)]
-            #self.untransformed_sills_min = [self.inverse_transform_table.get(sill_min, sill_min) for sill_min in self.sills_min]
-            #self.untransformed_sills_max = [self.inverse_transform_table.get(sill_max, sill_max) for sill_max in self.sills_max]
-            #self.untransformed_best_nugget = self.inverse_transform_table.get(self.best_nugget, self.best_nugget) if config['nugget'] else None
+
         
     def plot_best_spherical_model(self):
         """
