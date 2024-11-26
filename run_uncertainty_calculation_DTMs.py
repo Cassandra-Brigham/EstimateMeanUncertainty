@@ -85,6 +85,8 @@ def run_uncertainty_calculation_DTMs (vert_diff_path_dtm, output_path, unit, dem
             file.write(f"\t\tSpherical model {i + 1}\n")
             file.write(f"\t\t\tRange {i + 1}: {V.ranges[i]:.3f}" + unit + "\n")
             file.write(f"\t\t\tSill {i + 1}: {V.sills[i]:.3f}\n")
+        if nugget:
+            file.write(f"\t\tNugget effect:{nugget:.3f}\n")
         
         file.write("\tMean Uncertainty\n")
         file.write("\t\tMean, random, uncorrelated uncertainty\n")

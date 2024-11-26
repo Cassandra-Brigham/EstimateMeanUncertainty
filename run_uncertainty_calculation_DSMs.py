@@ -95,12 +95,15 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
             file.write(f"\t\tSpherical model {i + 1}\n")
             file.write(f"\t\t\tRange {i + 1}: {V.ranges[i]:.3f}" + unit + "\n")
             file.write(f"\t\t\tSill {i + 1}: {V.sills[i]:.3f}\n")
+        if nugget:
+            file.write(f"\t\tNugget effect:{nugget:.3f}\n")
         
         file.write("\tMean Uncertainty\n")
         file.write("\t\tMean, random, uncorrelated uncertainty\n")
         file.write(f"\t\t\t{uncertainty.mean_random_uncorrelated:.3f}" + unit + "\n")
         
         file.write("\t\tMean, random, correlated uncertainty\n")
+        
         for i in range(len(V.ranges)):  # Use the same number of models as before
             file.write(f"\t\t\tFrom model {i + 1}:\n")
             file.write(f"\t\t\t\tOptimal: {getattr(uncertainty, f'mean_random_correlated_{i + 1}'): .3f}" + unit + "\n")
