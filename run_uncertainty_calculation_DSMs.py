@@ -64,16 +64,16 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
 
 
     #Plot and save modified raster
-    fig1=raster2_data_handler.plot_raster()
+    fig1=raster2_data_handler.plot_raster("Vertical differencing results corrected for vertical bias (ground only)",normal_transform=False)
     fig1.savefig("outputs/modified_diff_raster_1st_return.png", dpi=300)
 
     # Plot and save stats (ground)
-    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = False)
+    fig2=stats_dtm.plot_data_stats(normal_transform = False, filtered = True)
     fig2.savefig("outputs/vert_diff_ground_stats_1st_return.png", dpi=300)
 
     # Plot and save stats (1st return)
     stats_dsm = StatisticalAnalysis(raster_data_handler_dsm)
-    fig3=stats_dsm.plot_data_stats()
+    fig3=stats_dsm.plot_data_stats(normal_transform = False, filtered = True)
     fig3.savefig("outputs/vert_diff_1st_returns_stats_1st_return.png", dpi=300)
 
     # Plot and save variogram
