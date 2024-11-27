@@ -213,7 +213,7 @@ class RasterDataHandler:
             
         fig,ax=plt.subplots(figsize=(10, 6))
         rio_data.plot(cmap="bwr_r", ax=ax, robust = True)
-        ax.set_title(title)
+        ax.set_title(title, pad=30)
         ax.set_xlabel('Easting (m)')
         ax.set_ylabel('Northing (m)')
         ax.ticklabel_format(style="plain")
