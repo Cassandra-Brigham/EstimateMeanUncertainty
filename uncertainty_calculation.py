@@ -349,7 +349,7 @@ class StatisticalAnalysis:
         fig, ax = plt.subplots()
         
         # Plot the histogram of the data
-        ax.hist(data, bins=60, density=False, alpha=0.6, color='g')
+        ax.hist(data, bins = 20, density=False, alpha=0.6, color='g')
         ax.axvline(mean, color='r', linestyle='dashed', linewidth=1, label='Mean')
         ax.axvline(median, color='b', linestyle='dashed', linewidth=1, label='Median')
         for m in mode_val:  # Plot each mode
@@ -574,6 +574,95 @@ class VariogramAnalysis:
         
         return np.array(back_transformed_variogram)
     
+    @staticmethod
+    @njit(parallel=True)
+    def bin_distances_and_squared_differences(coords, values, bin_width, max_lag_multiplier, placeholder_max_distance = 20000):
+        """
+        Compute and bin pairwise distances and squared differences for Matheron estimation.
+
+        Parameters:
+        -----------
+        coords : np.ndarray
+            Array of coordinates of shape (M, 2).
+        values : np.ndarray
+            Array of values of shape (M,).
+        bin_edges : np.ndarray
+            Array of bin edges for distance binning.
+
+        Returns:
+        --------
+        bin_counts : np.ndarray
+            Counts of pairs in each bin.
+        binned_sum_squared_diff : np.ndarray
+            Sum of squared differences for each bin.
+        """
+        #Determine bin edges using large max bin distance placeholder value
+        n_bins = int(np.ceil(placeholder_max_distance / bin_width)) + 1
+        bin_edges = np.arange(0, n_bins * bin_width, bin_width)
+        
+        M = coords.shape[0]
+        max_distance = 0.0
+        bin_counts = np.zeros(n_bins, dtype=np.int64)
+        binned_sum_squared_diff = np.zeros(n_bins, dtype=np.float64)
+
+        for i in prange(M):
+            for j in range(i + 1, M):
+                # Compute the pairwise distance
+                d = 0.0
+                for k in range(coords.shape[1]):
+                    tmp = coords[i, k] - coords[j, k]
+                    d += tmp * tmp
+                dist = np.sqrt(d)
+                max_distance = max(max_distance, dist)
+                
+                
+                # Compute the squared difference
+                diff_squared = (values[i] - values[j]) ** 2
+
+                # Find the bin for this distance
+                #bin_idx = np.searchsorted(bin_edges, dist) - 1
+                bin_idx = int(dist / bin_width)
+                if 0 <= bin_idx < n_bins:
+                    bin_counts[bin_idx] += 1
+                    binned_sum_squared_diff[bin_idx] += diff_squared
+        
+        # Recalculate bins based on actual max_distance
+        if max_lag_multiplier == "max":
+            max_lag = max_distance
+        else:
+            max_lag = int(max_distance*max_lag_multiplier)
+        n_bins = int(np.ceil(max_lag / bin_width)) + 1
+        bin_edges = bin_edges[:n_bins]
+        bin_counts = bin_counts[:n_bins]
+        binned_sum_squared_diff = binned_sum_squared_diff[:n_bins]
+
+        return n_bins, bin_counts, binned_sum_squared_diff, max_distance, max_lag
+    
+    @staticmethod
+    def compute_matheron(bin_counts, binned_sum_squared_diff):
+        """
+        Compute the Matheron estimator from bin counts and squared differences.
+
+        Parameters:
+        -----------
+        bin_counts : np.ndarray
+            Counts of pairs in each bin.
+        binned_sum_squared_diff : np.ndarray
+            Sum of squared differences for each bin.
+
+        Returns:
+        --------
+        matheron_estimates : np.ndarray
+            Matheron variogram estimates for each bin.
+        """
+        matheron_estimates = np.zeros_like(bin_counts, dtype=np.float64)
+        for i in range(len(bin_counts)):
+            if bin_counts[i] > 0:
+                matheron_estimates[i] = binned_sum_squared_diff[i] / (2 * bin_counts[i])
+            else:
+                matheron_estimates[i] = np.nan  # Handle empty bins
+        return matheron_estimates
+    
     def numba_variogram(self, area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights):
         """
         Calculate the variogram using Numba for performance optimization.
@@ -618,124 +707,12 @@ class VariogramAnalysis:
         else:
             self.declustering_weights = None
         
-        
-        @njit(parallel=True)
-        def compute_pairwise_numba(coords, values):
-            M = coords.shape[0]
-            distances = np.empty((M, M), dtype=np.float64)
-            abs_differences = np.empty((M, M), dtype=np.float64)
-            
-            for i in prange(M):
-                for j in range(i, M):  # Only compute upper triangle
-                    d = 0.0
-                    for k in range(coords.shape[1]):  # Iterate over dimensions
-                        tmp = coords[i, k] - coords[j, k]
-                        d += tmp * tmp
-                    dist = np.sqrt(d)
-                    distances[i, j] = dist
-                    distances[j, i] = dist  # Symmetric matrix
-                    
-                    diff = abs(values[i] - values[j])
-                    abs_differences[i, j] = diff
-                    abs_differences[j, i] = diff  # Symmetric matrix
-            
-            return distances, abs_differences
-        
-        pairwise_distances, pairwise_abs_diff = compute_pairwise_numba(self.raster_data_handler.coords, self.raster_data_handler.samples)
-
-        
-        # Max distance and lag for binning
-        max_distance = np.max(pairwise_distances)
-        if max_lag_multiplier == "median":
-            max_lag = np.median(pairwise_distances)
-        elif max_lag_multiplier == "max":
-            max_lag = max_distance
-        else:
-            max_lag = max_distance*max_lag_multiplier
         min_distance = 0.0
 
-        n_bins = int((max_lag - min_distance) / bin_width) + 1
-
-        # Create bins for distances
-        bins = np.linspace(min_distance, n_bins * bin_width, n_bins + 1)
-
-        # Digitize distances to assign them to bins
-        bin_indices = np.digitize(pairwise_distances, bins) - 1  # Subtract 1 to correct bin indexing
+        n_bins, bin_counts, binned_sum_squared_diff, max_distance, max_lag = self.bin_distances_and_squared_differences(self.raster_data_handler.coords, self.raster_data_handler.samples, bin_width, max_lag_multiplier, placeholder_max_distance = 20000)
+        matheron_estimates = self.compute_matheron(bin_counts, binned_sum_squared_diff)
         
-        # Preallocate arrays for tracking differences and counts per bin
-        max_pairs_per_bin = (self.raster_data_handler.coords.shape[0] ** 2) // 2  # Approximate upper bound
-        differences = np.zeros((n_bins, max_pairs_per_bin), dtype=np.float64)  # 2D array to store differences
-        bin_counts = np.zeros(n_bins, dtype=np.int32)  # Track counts per bin
-        variogram_matheron = np.zeros(n_bins, dtype=np.float64)  # Store variogram values
-        
-        @njit(parallel=True)
-        def populate_bins_unique_numba(bin_indices, pairwise_abs_diff, differences, bin_counts, num_points, n_bins):
-            """
-            Populate bins with unique pairwise absolute differences using Numba for optimization.
-
-            Parameters:
-            -----------
-            bin_indices : ndarray
-                A 2D array of bin indices for each pair of points.
-            pairwise_abs_diff : ndarray
-                A 2D array of pairwise absolute differences.
-            differences : ndarray
-                A 2D array to store the differences for each bin.
-            bin_counts : ndarray
-                A 1D array to count the number of elements in each bin.
-            num_points : int
-                The number of points.
-            n_bins : int
-                The number of bins.
-
-            Returns:
-            --------
-            tuple
-                Updated bin_counts and differences arrays.
-            """
-            # Populate bins without using a list of arrays
-            for i in prange(num_points):
-                for j in range(i + 1, num_points):  # Only calculate upper triangle to avoid redundancy
-                    bin_idx = bin_indices[i, j]
-                    if bin_idx < n_bins:
-                        diff_value = pairwise_abs_diff[i, j]
-                        count = bin_counts[bin_idx]
-                        differences[bin_idx, count] = diff_value
-                        bin_counts[bin_idx] += 1
-            
-            return bin_counts, differences
-
-        bin_counts, differences = populate_bins_unique_numba(bin_indices, pairwise_abs_diff, differences, bin_counts, self.raster_data_handler.coords.shape[0], n_bins)
-        
-        # Trim excess zeros from 'differences'
-        trimmed_differences = [differences[b][:bin_counts[b]] for b in range(n_bins)]
-        
-        @njit(parallel=True, fastmath=True)
-        def matheron(x):
-            """
-            Calculate the Matheron estimator for a given array.
-
-            The Matheron estimator is used to estimate the variance of a sample.
-            This function prevents a ZeroDivisionError by returning NaN if the input array is empty.
-
-            Parameters:
-            x (numpy.ndarray): Input array for which the Matheron estimator is calculated.
-
-            Returns:
-            float: The Matheron estimator value. Returns NaN if the input array is empty.
-            """
-            # prevent ZeroDivisionError
-            if x.size == 0:
-                return np.nan
-
-            return (1. / (2 * x.size)) * np.sum(np.power(x, 2))
-        
-        # Calculate the variogram for each bin
-        for i in prange(n_bins):
-            #variogram_dowd[i] = 2.198 * np.nanmedian(trimmed_differences[i]) ** 2 / 2
-            variogram_matheron[i] = matheron(trimmed_differences[i])
-            
-        return bin_counts, variogram_matheron, n_bins, min_distance, max_distance
+        return bin_counts, matheron_estimates, n_bins, min_distance, max_distance, max_lag
     
     def calculate_mean_variogram_numba(self, area_side, samples_per_area, max_samples, bin_width, max_n_bins, n_runs, cell_size, n_offsets, max_lag_multiplier=1/3, normal_transform = True, weights = True):
         
@@ -791,14 +768,14 @@ class VariogramAnalysis:
         
         for run in range(n_runs):
             # Calculate variogram for all runs
-            count, variogram, n_bins, min_distance, max_distance = self.numba_variogram(area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights)
+            count, variogram, n_bins, min_distance, max_distance, max_lag = self.numba_variogram(area_side, samples_per_area, max_samples, bin_width, cell_size, n_offsets, max_lag_multiplier, normal_transform, weights)
             
             # Store the results
             all_variograms.loc[run, :variogram.size-1] = pd.Series(variogram).loc[:variogram.size-1]
             counts.loc[run, :count.size-1] = pd.Series(count).loc[:count.size-1]
             all_n_bins[run] = n_bins
             min_distances[run] = min_distance
-            max_distances[run] = max_distance
+            max_distances[run] = max_lag
         
         # Calculate mean and std dev of variograms across all runs
         mean_variogram = dropna(np.nanmean(all_variograms, axis=0))
