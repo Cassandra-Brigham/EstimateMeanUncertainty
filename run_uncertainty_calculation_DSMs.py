@@ -3,6 +3,7 @@ import numpy as np
 from  uncertainty_calculation import RasterDataHandler, StatisticalAnalysis, VariogramAnalysis, UncertaintyCalculation
 import os
 import argparse
+import json
 
 def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, output_path, unit, dem_resolution):
     #Load vertical differencing raster data from DTMs
@@ -33,7 +34,7 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
     V = VariogramAnalysis(raster2_data_handler)
 
     #Calculate a mean variogram with 75 bins from variograms made over 10 runs
-    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 500, max_samples = 1000000, bin_width = 30, max_n_bins = 3000, n_runs = 30, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1/2, normal_transform = False, weights = False)
+    V.calculate_mean_variogram_numba(area_side = 250, samples_per_area = 300, max_samples = 1000000, bin_width = 30, max_n_bins = 3000, n_runs = 10, cell_size = 50, n_offsets = 100, max_lag_multiplier = 1/2, normal_transform = False, weights = False)
 
     #Fit a sum of up to three spherical models to the mean empirical variogram
     V.fit_best_spherical_model()
@@ -114,6 +115,64 @@ def run_uncertainty_calculation_DSMs (vert_diff_path_dsm, vert_diff_path_dtm, ou
         file.write(f"\t\t\tOptimal: {uncertainty.total_mean_uncertainty:.3f}" + unit + "\n")
         file.write(f"\t\t\tMinimum: {uncertainty.total_mean_uncertainty_min:.3f}" + unit + "\n")
         file.write(f"\t\t\tMaximum: {uncertainty.total_mean_uncertainty_max:.3f}" + unit + "\n")
+    
+    # Create JSON file with output data  
+    # Create the dictionary to store the output data
+    output_data = {
+        "Output variables": {
+            "Area": f"{uncertainty.area} {unit}^2",
+            "Error": {
+                "Vertical bias": f"{vertical_bias:.4f} {unit}",
+                "Uncertainty in the vertical bias": f"{median_uncertainty:.4f} {unit}"
+            },
+            "Spherical models": {}
+        }
+    }
+
+    # Add the spherical models data
+    for i in range(len(V.ranges)):
+        model_key = f"Spherical model {i + 1}"
+        output_data["Output variables"]["Spherical models"][model_key] = {
+            f"Range {i + 1}": f"{V.ranges[i]:.4f} {unit}",
+            f"Sill {i + 1}": f"{V.sills[i]:.4f}"
+        }
+
+    # Add the nugget effect if it exists
+    if nugget:
+        output_data["Output variables"]["Error"]["Nugget effect"] = f"{nugget:.4f}"
+
+    # Add the mean uncertainty data
+    output_data["Output variables"]["Mean Uncertainty"] = {
+        "Mean, random, uncorrelated uncertainty": f"{uncertainty.mean_random_uncorrelated:.4f} {unit}",
+        "Mean, random, correlated uncertainty": {}
+    }
+
+    # Add the correlated uncertainties for each model
+    for i in range(len(V.ranges)):
+        model_uncertainty = {
+            f"From model {i + 1}": {
+                "Optimal": f"{getattr(uncertainty, f'mean_random_correlated_{i + 1}'): .4f} {unit}",
+                "Minimum": f"{getattr(uncertainty, f'mean_random_correlated_{i + 1}_min'): .4f} {unit}",
+                "Maximum": f"{getattr(uncertainty, f'mean_random_correlated_{i + 1}_max'): .4f} {unit}"
+            }
+        }
+        output_data["Output variables"]["Mean Uncertainty"]["Mean, random, correlated uncertainty"][f"From model {i + 1}"] = model_uncertainty[f"From model {i + 1}"]
+
+    # Add the total mean uncertainty data
+    output_data["Output variables"]["Mean Uncertainty"]["Total mean uncertainty"] = {
+        "Optimal": f"{uncertainty.total_mean_uncertainty:.4f} {unit}",
+        "Minimum": f"{uncertainty.total_mean_uncertainty_min:.4f} {unit}",
+        "Maximum": f"{uncertainty.total_mean_uncertainty_max:.4f} {unit}"
+    }
+
+    # Define the output file path
+    file_path = "outputs/uncertainty_estimation_output_1st_return.json"
+
+    # Write the dictionary to a JSON file
+    with open(file_path, 'w') as json_file:
+        json.dump(output_data, json_file, indent=4)
+
+    print(f"Output written to {file_path}")
 
 
 if __name__ == "__main__":
